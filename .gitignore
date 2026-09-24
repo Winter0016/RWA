@@ -1,0 +1,14 @@
+# Global exclusions
+node_modules/
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Scratch/Temporary folders
+scratch/
+frontend-old/
+
+# Editor
+.vscode/
+.idea/
