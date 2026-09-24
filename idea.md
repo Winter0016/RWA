@@ -20,7 +20,7 @@ Users pay for the asset using the official Circle Testnet USDC token. The entire
 - **PostgreSQL (Indexer):** Acts as an indexer, caching user balances, pending transactions, and whitelist statuses.
 - **GraphQL (Apollo):** Serves the indexed user data and token supply metrics incredibly fast to the React frontend. Fully secured by Privy JWTs.
 
-### 3. Frontend (React.js)
+### 3. Frontend (Next.js)
 - **Admin Dashboard:** A private page for the platform administrator to view the total `dTesla` supply, all user balances, and manage protocol/user whitelists.
 - **User Page:** A seamless storefront where users can input how much `dTesla` they want to buy. Utilizes a Two-Step Escrow architecture to guarantee 1:1 backing.
 
