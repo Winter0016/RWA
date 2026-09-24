@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@apollo/client/react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { encodeFunctionData } from 'viem';
+import { encodeFunctionData, createPublicClient, http, formatUnits } from 'viem';
+import { arbitrumSepolia } from 'viem/chains';
 import { io } from 'socket.io-client';
 import { GET_ALL_USERS, GET_ALL_TRANSACTIONS, GET_ALL_CONTRACTS } from '@/graphql/queries';
 import { UPSERT_CONTRACT, UPDATE_USER_WHITELIST } from '@/graphql/mutations';
-import { DTSLA_ADDRESS, DTSLA_ABI } from '@/constants/contracts';
+import { DTSLA_ADDRESS, DTSLA_ABI, USDC_ADDRESS, USDC_ABI } from '@/constants/contracts';
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'transactions' | 'contracts'>('users');
@@ -46,6 +47,41 @@ export default function AdminPage() {
       socket.disconnect();
     };
   }, [refetchTxs]);
+
+  // Fetch true on-chain supply and USDC vault balance for Reconciliation
+  const [chainSupply, setChainSupply] = useState<number | null>(null);
+  const [chainUsdcBalance, setChainUsdcBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchChainMetrics = async () => {
+      try {
+        const publicClient = createPublicClient({
+          chain: arbitrumSepolia,
+          transport: http('https://sepolia-rollup.arbitrum.io/rpc')
+        });
+        
+        const [supply, usdcBal] = await Promise.all([
+          publicClient.readContract({
+            address: DTSLA_ADDRESS as `0x${string}`,
+            abi: DTSLA_ABI,
+            functionName: 'totalSupply'
+          }),
+          publicClient.readContract({
+            address: USDC_ADDRESS as `0x${string}`,
+            abi: USDC_ABI,
+            functionName: 'balanceOf',
+            args: [DTSLA_ADDRESS]
+          })
+        ]);
+        
+        setChainSupply(Number(formatUnits(supply as bigint, 18)));
+        setChainUsdcBalance(Number(formatUnits(usdcBal as bigint, 6))); // USDC uses 6 decimals
+      } catch (err) {
+        console.error("Failed to fetch chain metrics:", err);
+      }
+    };
+    fetchChainMetrics();
+  }, []);
 
   const { sendTransaction } = usePrivy();
   const { wallets } = useWallets();
@@ -136,6 +172,23 @@ export default function AdminPage() {
     );
   }
 
+  // Calculate Metrics from global transaction history
+  const allTx = txData?.getAllTransactions || [];
+  
+  const totalMintedDTSLA = allTx
+    .filter((tx: any) => tx.type === 'MINT' && tx.status === 'COMPLETED')
+    .reduce((sum: number, tx: any) => sum + Number(tx.dtsla_amount || 0), 0);
+    
+  const totalRedeemedDTSLA = allTx
+    .filter((tx: any) => tx.type === 'REDEEM' && tx.status === 'COMPLETED')
+    .reduce((sum: number, tx: any) => sum + Number(tx.dtsla_amount || 0), 0);
+    
+  const currentDTSLASupply = totalMintedDTSLA - totalRedeemedDTSLA;
+
+  const totalUSDCVolume = allTx
+    .filter((tx: any) => tx.status === 'COMPLETED')
+    .reduce((sum: number, tx: any) => sum + Number(tx.usdc_amount || 0), 0);
+
   return (
     <div className="flex-1 w-full flex flex-col items-center relative ">
       <main className="max-w-360 w-full mx-auto px-6 py-12 space-y-8 ">
@@ -144,6 +197,52 @@ export default function AdminPage() {
         <div>
           <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Admin Dashboard</h1>
           <p className="text-zinc-400">Manage users, transactions, and smart contract whitelists.</p>
+        </div>
+
+        {/* Global Metrics - Proof of Reserves */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+            <h3 className="text-sm font-medium text-zinc-400 mb-2">Total dTSLA Supply</h3>
+            <div className="flex justify-between items-end">
+              <div>
+                <div className="text-xs text-zinc-500 mb-1">Database (Indexer)</div>
+                <div className="text-2xl font-bold text-white font-mono">{currentDTSLASupply.toFixed(4)}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-blue-400/80 mb-1">Blockchain (Arbitrum)</div>
+                <div className="text-2xl font-bold text-blue-400 font-mono">
+                  {chainSupply !== null ? chainSupply.toFixed(4) : '...'}
+                </div>
+              </div>
+            </div>
+            {/* Reconciliation Status Indicator */}
+            {chainSupply !== null && (
+              <div className={`absolute top-0 right-0 w-full h-1 ${Math.abs(currentDTSLASupply - chainSupply) < 0.001 ? 'bg-emerald-500' : 'bg-red-500'}`} />
+            )}
+          </div>
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
+            <h3 className="text-sm font-medium text-zinc-400 mb-2">Total USDC Vault Balance</h3>
+            <div className="flex justify-between items-end">
+              <div>
+                <div className="text-xs text-zinc-500 mb-1">Database (Indexer)</div>
+                <div className="text-2xl font-bold text-emerald-400 font-mono">${totalUSDCVolume.toLocaleString()}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-blue-400/80 mb-1">Blockchain (Arbitrum)</div>
+                <div className="text-2xl font-bold text-blue-400 font-mono">
+                  {chainUsdcBalance !== null ? `$${chainUsdcBalance.toLocaleString()}` : '...'}
+                </div>
+              </div>
+            </div>
+            {/* Reconciliation Status Indicator */}
+            {chainUsdcBalance !== null && (
+              <div className={`absolute top-0 right-0 w-full h-1 ${Math.abs(totalUSDCVolume - chainUsdcBalance) < 0.001 ? 'bg-emerald-500' : 'bg-red-500'}`} />
+            )}
+          </div>
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+            <h3 className="text-sm font-medium text-zinc-400 mb-1">Total Transactions</h3>
+            <div className="text-3xl font-bold text-white font-mono">{allTx.length}</div>
+          </div>
         </div>
 
         {/* Tabs */}
