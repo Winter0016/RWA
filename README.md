@@ -1,7 +1,5 @@
 # 🏎️ dTesla: Web3 Real World Assets (RWA)
 
-![dTesla Architecture](./tech_backend_frontend.jpg)
-
 **dTesla** is a full-stack Real World Asset (RWA) platform that allows users to seamlessly purchase synthetic tokens (`dTSLA`) backed 1:1 by real Tesla stock held in a traditional brokerage account. 
 
 By utilizing Account Abstraction (ERC-4337) and a custom Two-Step Escrow architecture, users experience a gasless, Web2-like checkout flow while maintaining full Web3 composability.
