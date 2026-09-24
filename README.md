@@ -1,18 +1,18 @@
-# 🏎️ dTesla: Web3 Real World Assets (RWA)
+# dTesla: Web3 Real World Assets (RWA)
 
 **dTesla** is a full-stack Real World Asset (RWA) platform that allows users to seamlessly purchase synthetic tokens (`dTSLA`) backed 1:1 by real Tesla stock held in a traditional brokerage account. 
 
 By utilizing Account Abstraction (ERC-4337) and a custom Two-Step Escrow architecture, users experience a gasless, Web2-like checkout flow while maintaining full Web3 composability.
 
-## 📌 The Problem
+## The Problem
 Traditional finance requires users to navigate complex brokerage accounts, undergo lengthy KYC processes, and hold fiat currencies to buy stocks. Web3 users want to gain exposure to real-world assets (like TSLA) but want to keep their assets on-chain to use in the broader DeFi ecosystem (lending, borrowing, etc.).
 
-## 💡 The Solution
+## The Solution
 A decentralized protocol where users pay for assets using Circle's official Testnet USDC. The entire process uses Account Abstraction (ERC-20 Paymaster) so users pay for their gas fees directly in USDC. The underlying collateral (real TSLA shares) is automatically bought and sold in real-time via the Alpaca Trading API, guaranteeing 1:1 backing.
 
 ---
 
-## 🏗️ The Tech Stack
+## The Tech Stack
 
 ### 1. Account Abstraction (Privy + Pimlico)
 - **Target Audience:** Web2 users who want exposure to stocks on-chain but don't want to manage private keys or ETH gas.
@@ -40,7 +40,7 @@ A decentralized protocol where users pay for assets using Circle's official Test
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Node.js & npm
