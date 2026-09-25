@@ -10,18 +10,23 @@ const oracleAccount = privateKeyToAccount(`0x${ORACLE_PRIVATE_KEY}`);
 
 const resolvers = {
   Query: {
-    users: async (_, args, context) => {
-      if (!context.user) throw new Error("UNAUTHENTICATED");
-      const { rows } = await pool.query('SELECT * FROM users');
-      return rows;
-    },
     userBySigner: async (_, { signer_address }, context) => {
       if (!context.user) throw new Error("UNAUTHENTICATED");
       const { rows } = await pool.query(
         'SELECT * FROM users WHERE signer_address = $1',
         [signer_address]
       );
-      return rows[0] || null;
+      const requestedUser = rows[0] || null;
+      if (!requestedUser) return null;
+      
+      // Security check: only allow querying own profile unless caller is admin
+      if (requestedUser.privy_id !== context.user.privyUserId) {
+        const callerRes = await pool.query('SELECT role FROM users WHERE privy_id = $1', [context.user.privyUserId]);
+        if (callerRes.rows[0]?.role !== 'admin') {
+          throw new Error("UNAUTHORIZED: You can only query your own profile");
+        }
+      }
+      return requestedUser;
     },
     getClaimSignature: async (_, { transactionHash }, context) => {
       if (!context.user) throw new Error("UNAUTHENTICATED");

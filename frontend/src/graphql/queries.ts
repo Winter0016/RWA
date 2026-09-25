@@ -63,3 +63,17 @@ export const GET_ALL_CONTRACTS = gql`
     }
   }
 `;
+
+export const GET_USER = gql`
+  query GetUser($signer_address: String!) {
+    userBySigner(signer_address: $signer_address) {
+      id
+      name
+      email
+      signer_address
+      wallet_address
+      role
+      is_whitelisted
+    }
+  }
+`;

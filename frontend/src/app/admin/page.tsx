@@ -10,6 +10,15 @@ import { GET_ALL_USERS, GET_ALL_TRANSACTIONS, GET_ALL_CONTRACTS } from '@/graphq
 import { UPSERT_CONTRACT, UPDATE_USER_WHITELIST } from '@/graphql/mutations';
 import { DTSLA_ADDRESS, DTSLA_ABI, USDC_ADDRESS, USDC_ABI } from '@/constants/contracts';
 
+const truncateDecimals = (val: number | string, decimals: number = 6) => {
+  if (!val) return '0';
+  // Force javascript to expand scientific notation out to 18 decimals
+  let str = Number(val).toFixed(18); 
+  // Strip off all the useless trailing zeroes at the very end
+  str = str.replace(/\.?0+$/, ''); 
+  return str === '' ? '0' : str;
+};
+
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'transactions' | 'contracts'>('users');
   const [whitelisting, setWhitelisting] = useState<string | null>(null);
@@ -187,7 +196,10 @@ export default function AdminPage() {
 
   const totalUSDCVolume = allTx
     .filter((tx: any) => tx.status === 'COMPLETED')
-    .reduce((sum: number, tx: any) => sum + Number(tx.usdc_amount || 0), 0);
+    .reduce((sum: number, tx: any) => {
+      const amount = Number(tx.usdc_amount || 0);
+      return tx.type === 'REDEEM' ? sum - amount : sum + amount;
+    }, 0);
 
   return (
     <div className="flex-1 w-full flex flex-col items-center relative ">
@@ -206,18 +218,18 @@ export default function AdminPage() {
             <div className="flex justify-between items-end">
               <div>
                 <div className="text-xs text-zinc-500 mb-1">Database (Indexer)</div>
-                <div className="text-2xl font-bold text-white font-mono">{currentDTSLASupply.toFixed(4)}</div>
+                <div className="text-2xl font-bold text-white font-mono">{currentDTSLASupply.toString()}</div>
               </div>
               <div className="text-right">
                 <div className="text-xs text-blue-400/80 mb-1">Blockchain (Arbitrum)</div>
                 <div className="text-2xl font-bold text-blue-400 font-mono">
-                  {chainSupply !== null ? chainSupply.toFixed(4) : '...'}
+                  {chainSupply !== null ? chainSupply.toString() : '...'}
                 </div>
               </div>
             </div>
             {/* Reconciliation Status Indicator */}
             {chainSupply !== null && (
-              <div className={`absolute top-0 right-0 w-full h-1 ${Math.abs(currentDTSLASupply - chainSupply) < 0.001 ? 'bg-emerald-500' : 'bg-red-500'}`} />
+              <div className={`absolute top-0 right-0 w-full h-1 ${Math.abs(currentDTSLASupply - chainSupply) < 0.000001 ? 'bg-emerald-500' : 'bg-red-500'}`} />
             )}
           </div>
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 shadow-xl relative overflow-hidden flex flex-col justify-between">
@@ -225,18 +237,20 @@ export default function AdminPage() {
             <div className="flex justify-between items-end">
               <div>
                 <div className="text-xs text-zinc-500 mb-1">Database (Indexer)</div>
-                <div className="text-2xl font-bold text-emerald-400 font-mono">${totalUSDCVolume.toLocaleString()}</div>
+                <div className="text-2xl font-bold text-emerald-400 font-mono">
+                  ${totalUSDCVolume.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                </div>
               </div>
               <div className="text-right">
                 <div className="text-xs text-blue-400/80 mb-1">Blockchain (Arbitrum)</div>
                 <div className="text-2xl font-bold text-blue-400 font-mono">
-                  {chainUsdcBalance !== null ? `$${chainUsdcBalance.toLocaleString()}` : '...'}
+                  {chainUsdcBalance !== null ? `$${chainUsdcBalance.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}` : '...'}
                 </div>
               </div>
             </div>
             {/* Reconciliation Status Indicator */}
             {chainUsdcBalance !== null && (
-              <div className={`absolute top-0 right-0 w-full h-1 ${Math.abs(totalUSDCVolume - chainUsdcBalance) < 0.001 ? 'bg-emerald-500' : 'bg-red-500'}`} />
+              <div className={`absolute top-0 right-0 w-full h-1 ${Math.abs(totalUSDCVolume - chainUsdcBalance) < 0.000001 ? 'bg-emerald-500' : 'bg-red-500'}`} />
             )}
           </div>
           <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
@@ -374,9 +388,9 @@ export default function AdminPage() {
                         <td className="px-6 py-4 font-mono text-sm text-zinc-300">
                           {tx.wallet_address ? `${tx.wallet_address.slice(0, 6)}...${tx.wallet_address.slice(-4)}` : 'Unknown'}
                         </td>
-                        <td className="px-6 py-4 font-mono text-white">${tx.usdc_amount}</td>
+                        <td className="px-6 py-4 font-mono text-white">${tx.usdc_amount ? truncateDecimals(tx.usdc_amount) : '-'}</td>
                         <td className="px-6 py-4 font-mono text-zinc-300">
-                          {tx.dtsla_amount ? tx.dtsla_amount : '-'}
+                          {tx.dtsla_amount ? truncateDecimals(tx.dtsla_amount) : '-'}
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-xs px-2 py-1 rounded-full bg-zinc-800 text-zinc-300">

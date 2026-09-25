@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 interface RedeemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (amount: number) => void;
+  onConfirm: (amount: string) => void;
   maxAmount: string;
   ticker: string;
 }
@@ -55,7 +55,7 @@ export function RedeemModal({ isOpen, onClose, onConfirm, maxAmount, ticker }: R
           <button
             onClick={() => {
               if (amount && !isNaN(Number(amount)) && Number(amount) > 0) {
-                onConfirm(Number(amount));
+                onConfirm(amount);
                 setAmount('');
               }
             }}

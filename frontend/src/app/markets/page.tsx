@@ -59,9 +59,17 @@ export default function Home() {
     setIsDepositModalOpen(true);
   };
 
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    // Allow empty, integers, and up to 6 decimal places
+    if (val === '' || /^\d*\.?\d{0,6}$/.test(val)) {
+      setDepositAmount(val);
+    }
+  };
+
   const handleConfirmDeposit = async () => {
     setIsDepositModalOpen(false);
-    await initiateMint(Number(depositAmount));
+    await initiateMint(depositAmount);
   };
 
   return (
@@ -169,13 +177,11 @@ export default function Home() {
               
               <div className="mb-6 relative">
                 <input 
-                  type="number" 
+                  type="text" 
                   value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
+                  onChange={handleAmountChange}
                   className="w-full bg-[#1E293B] border border-[#334155] rounded-xl px-4 py-3 text-white text-lg focus:outline-none focus:border-blue-500 transition-colors"
                   placeholder="0.00"
-                  min="0"
-                  step="0.01"
                 />
                 <div className="absolute right-4 top-3.5 flex items-center gap-2">
                   <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">$</div>

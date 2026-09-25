@@ -15,18 +15,7 @@ import { usePathname } from 'next/navigation';
 const USDC_ADDRESS = '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d';
 const ERC20_ABI = [{ type: 'function', name: 'balanceOf', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }], stateMutability: 'view' }];
 
-const GET_USER = gql`
-  query GetUser($signer_address: String!) {
-    userBySigner(signer_address: $signer_address) {
-      id
-      name
-      email
-      signer_address
-      wallet_address
-      role
-    }
-  }
-`;
+import { GET_USER } from '../graphql/queries';
 
 export default function Header() {
   const pathname = usePathname();
@@ -63,7 +52,8 @@ export default function Header() {
   // Get username from database, fallback to Google/Privy, fallback to local state, fallback to "User"
   const username = userData?.userBySigner?.name || user?.google?.name || user?.google?.email || user?.email?.address || 'User';
 
-  console.log("username: ", username);
+  console.log("userdata: ", userData);
+  console.log("verified: ", userData?.userBySigner?.is_whitelisted);
 
   return (
     <header className="w-full bg-[#0B0F19] border-b border-[#1E293B]">
@@ -160,6 +150,21 @@ export default function Header() {
                   <div className="absolute right-0 top-10 mt-2 w-72 bg-[#0B0F19] border border-[#1E293B] rounded-lg shadow-xl overflow-hidden py-2 z-50">
                     <div className="px-4 py-3 border-b border-[#1E293B]">
 
+                      <div className="mb-4 pb-4 border-b border-[#1E293B]/50 flex justify-between items-center">
+                        <span className="text-xs text-slate-400 font-medium">Account Status</span>
+                        {userData?.userBySigner?.is_whitelisted ? (
+                          <span className="text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-emerald-500/20 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                            Verified
+                          </span>
+                        ) : (
+                          <span className="text-red-400 bg-red-400/10 px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider border border-red-500/20 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            Unverified
+                          </span>
+                        )}
+                      </div>
+
                       <div className="mb-4">
                         <p className="text-xs text-slate-500 font-medium mb-1 flex items-center justify-between">
                           <span>Smart Account (Wallet)</span>
@@ -167,8 +172,8 @@ export default function Header() {
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <p className="flex-1 text-sm font-mono text-slate-300 bg-[#1E293B]/50 px-2 py-1.5 rounded border border-[#334155]">
-                            {smartAccountAddress 
-                              ? `${smartAccountAddress.slice(0, 6)}...${smartAccountAddress.slice(-4)}` 
+                            {smartAccountAddress
+                              ? `${smartAccountAddress.slice(0, 6)}...${smartAccountAddress.slice(-4)}`
                               : (wallets[0]?.walletClientType !== 'privy' ? 'Unlock Wallet Extension' : 'Loading...')}
                           </p>
                           {smartAccountAddress && (

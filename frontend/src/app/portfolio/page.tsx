@@ -11,6 +11,15 @@ import { useTransactionFlow } from '@/hooks/useTransactionFlow';
 import { TransactionModal } from '@/components/TransactionModal';
 import { RedeemModal } from '@/components/RedeemModal';
 
+const truncateDecimals = (val: number | string, decimals: number = 6) => {
+  if (!val) return '0';
+  // Force javascript to expand scientific notation out to 18 decimals
+  let str = Number(val).toFixed(18); 
+  // Strip off all the useless trailing zeroes at the very end
+  str = str.replace(/\.?0+$/, ''); 
+  return str === '' ? '0' : str;
+};
+
 export default function Portfolio() {
   const { smartAccount } = useSmartAccount();
   const { ready, authenticated, login } = usePrivy();
@@ -50,8 +59,16 @@ export default function Portfolio() {
 
   const tslaPrice = liveTslaPrice !== null ? liveTslaPrice : 0;
 
-  const formattedBalance = dTslaBalance !== undefined ? formatUnits(dTslaBalance as bigint, 18) : '0.00';
-  const usdValue = dTslaBalance !== undefined && tslaPrice > 0 ? (Number(formattedBalance) * tslaPrice).toFixed(2) : '0.00';
+  const rawFormattedBalance = dTslaBalance !== undefined ? formatUnits(dTslaBalance as bigint, 18) : '0';
+  
+  // Exact BigInt Math to prevent JS floating point precision errors
+  const tslaPriceScaled = tslaPrice > 0 ? BigInt(Math.round(tslaPrice * 1e6)) : BigInt(0);
+  const rawUsdValueBigInt = dTslaBalance !== undefined ? ((dTslaBalance as bigint) * tslaPriceScaled) : BigInt(0);
+  const rawUsdValue = formatUnits(rawUsdValueBigInt, 24); // 18 from dTSLA + 6 from scaled price
+
+  const formattedBalance = truncateDecimals(rawFormattedBalance);
+  const usdValue = truncateDecimals(rawUsdValue);
+  const displayTslaPrice = truncateDecimals(tslaPrice);
 
   return (
     <div className="flex-1 w-full flex flex-col items-center relative">
@@ -119,7 +136,7 @@ export default function Portfolio() {
                         )}
                       </td>
                       <td className="px-6 py-4 font-mono text-slate-300">
-                        ${tslaPrice.toFixed(2)}
+                        ${displayTslaPrice}
                       </td>
                       <td className="px-6 py-4 font-mono text-white">${usdValue}</td>
                       <td className="px-6 py-4 text-right">
@@ -161,7 +178,7 @@ export default function Portfolio() {
           setIsRedeemModalOpen(false);
           await initiateRedeem(amount);
         }}
-        maxAmount={formattedBalance}
+        maxAmount={rawFormattedBalance}
         ticker="dTSLA"
       />
     </div>

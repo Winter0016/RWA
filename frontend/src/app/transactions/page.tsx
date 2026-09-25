@@ -7,7 +7,17 @@ import { useTransactionFlow } from '@/hooks/useTransactionFlow';
 import { TransactionModal } from '@/components/TransactionModal';
 
 // Arbitrum Sepolia Arbiscan URL
+// Arbitrum Sepolia Arbiscan URL
 const ARBISCAN_URL = "https://sepolia.arbiscan.io/tx/";
+
+const truncateDecimals = (val: number | string, decimals: number = 6) => {
+  if (!val) return '0';
+  // Force javascript to expand scientific notation out to 18 decimals
+  let str = Number(val).toFixed(18); 
+  // Strip off all the useless trailing zeroes at the very end
+  str = str.replace(/\.?0+$/, ''); 
+  return str === '' ? '0' : str;
+};
 
 export default function TransactionsPage() {
   const { ready, authenticated, user, login } = usePrivy();
@@ -121,14 +131,14 @@ export default function TransactionsPage() {
                         {/* USDC Amount */}
                         <td className="px-6 py-4">
                           <span className="font-mono text-white">
-                            ${Number(tx.usdc_amount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            ${truncateDecimals(tx.usdc_amount)}
                           </span>
                         </td>
 
                         {/* dTSLA Amount */}
                         <td className="px-6 py-4">
                           <span className="font-mono text-slate-300">
-                            {Number(tx.dtsla_amount).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })} dTSLA
+                            {truncateDecimals(tx.dtsla_amount)} dTSLA
                           </span>
                         </td>
 

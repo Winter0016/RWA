@@ -72,7 +72,7 @@ export function useTransactionFlow() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [smartAccount?.address]); // We deliberately exclude resumeClaim/resumeRedeem to avoid infinite re-renders
 
-  const initiateMint = async (usdcAmount: number) => {
+  const initiateMint = async (usdcAmount: string) => {
     if (!activeWalletAddress) return;
     setTxType('MINT');
     setState('REQUESTING_QUOTE');
@@ -92,7 +92,7 @@ export function useTransactionFlow() {
       const { timestamp, signature } = (data as any).reserveMintPower;
 
       // Convert USDC (USDC always uses 6 decimals)
-      const usdcAmountWei = parseUnits(usdcAmount.toString(), 6);
+      const usdcAmountWei = parseUnits(usdcAmount, 6);
 
       setState('AWAITING_DEPOSIT_TX');
 
@@ -144,8 +144,8 @@ export function useTransactionFlow() {
 
       const claimData = (claimRes.data as any).getClaimSignature;
 
-      const usdcConsumedWei = parseUnits(claimData.usdcAmount.toString(), 6);
-      const dTslaAmountWei = parseUnits(claimData.dTslaAmount.toString(), 18);
+      const usdcConsumedWei = parseUnits(Number(claimData.usdcAmount).toFixed(6), 6);
+      const dTslaAmountWei = parseUnits(Number(claimData.dTslaAmount).toFixed(18), 18);
 
       // 6. Encode Smart Contract Data for claimMint
       const claimCallData = encodeFunctionData({
@@ -168,7 +168,7 @@ export function useTransactionFlow() {
     }
   };
 
-  const initiateRedeem = async (dTslaAmount: number) => {
+  const initiateRedeem = async (dTslaAmount: string) => {
     if (!activeWalletAddress) return;
     setTxType('REDEEM');
     setState('AWAITING_DEPOSIT_TX'); // Reusing state for the on-chain lock
@@ -176,7 +176,7 @@ export function useTransactionFlow() {
     try {
       if (!smartAccount) throw new Error("Smart Account not initialized");
 
-      const dTslaAmountWei = parseUnits(dTslaAmount.toString(), 18);
+      const dTslaAmountWei = parseUnits(dTslaAmount, 18);
 
       const requestRedeemCallData = encodeFunctionData({
         abi: DTSLA_ABI,
@@ -213,8 +213,8 @@ export function useTransactionFlow() {
 
       const claimData = (claimRes.data as any).getClaimUSDCSignature;
 
-      const usdcAmountWei = parseUnits(claimData.usdcAmount.toString(), 6);
-      const dTslaAmountWei = parseUnits(claimData.dTslaAmount.toString(), 18);
+      const usdcAmountWei = parseUnits(Number(claimData.usdcAmount).toFixed(6), 6);
+      const dTslaAmountWei = parseUnits(Number(claimData.dTslaAmount).toFixed(18), 18);
 
       const redeemCallData = encodeFunctionData({
         abi: DTSLA_ABI,
@@ -248,8 +248,8 @@ export function useTransactionFlow() {
       });
 
       const refundData = (refundRes.data as any).getRefundSignature;
-      const usdcAmountWei = parseUnits(refundData.usdcAmount.toString(), 6);
-      const dTslaAmountWei = parseUnits(refundData.dTslaAmount.toString(), 18);
+      const usdcAmountWei = parseUnits(Number(refundData.usdcAmount).toFixed(6), 6);
+      const dTslaAmountWei = parseUnits(Number(refundData.dTslaAmount).toFixed(18), 18);
 
       let refundCallData;
       if (dTslaAmountWei > BigInt(0)) {

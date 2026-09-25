@@ -96,7 +96,7 @@ async function handleDeposit(log) {
 
   } catch (error) {
     console.error(`❌ Failed to process deposit for tx ${transactionHash}:`, error.message);
-    
+
     // The Alpaca order completely failed to place. 
     // We MUST mark the transaction as FAILED so the user can be refunded on-chain!
     try {
@@ -104,7 +104,7 @@ async function handleDeposit(log) {
         `UPDATE transactions SET status = 'FAILED' WHERE blockchain_tx = $1`,
         [transactionHash]
       );
-      
+
       const payload = JSON.stringify({
         walletAddress: user,
         status: 'FAILED',
@@ -204,7 +204,7 @@ async function handleRedeemRequested(log) {
 
   } catch (error) {
     console.error(`❌ Failed to process redeem request for tx ${transactionHash}:`, error.message);
-    
+
     // The Alpaca order completely failed to place (e.g. Wash Trade rule). 
     // We MUST mark the transaction as FAILED so the user can be refunded on-chain!
     try {
@@ -212,7 +212,7 @@ async function handleRedeemRequested(log) {
         `UPDATE transactions SET status = 'FAILED' WHERE blockchain_tx = $1`,
         [transactionHash]
       );
-      
+
       const payload = JSON.stringify({
         walletAddress: user,
         status: 'FAILED',
@@ -437,7 +437,7 @@ async function reconcilePendingOrders() {
       WHERE status = 'PENDING_ALPACA' 
       AND created_at < NOW() - INTERVAL '5 minutes'
     `);
-    
+
     if (pendingRes.rows.length === 0) return; // Perfect. Do nothing.
 
     console.log(`\n🔄 Reconciling ${pendingRes.rows.length} PENDING_ALPACA orders...`);
@@ -489,9 +489,9 @@ async function reconcilePendingOrders() {
           }
         } else if (order.status === 'rejected' || order.status === 'canceled' || order.status === 'expired') {
           console.log(`🚨 Order ${tx.blockchain_tx} was ${order.status}! Reconciling database to FAILED...`);
-          
+
           const failStatus = order.status === 'canceled' ? 'CANCELED_BY_ADMIN' : 'FAILED';
-          
+
           const updateRes = await pool.query(
             `UPDATE transactions SET status = $1 WHERE blockchain_tx = $2 AND status = 'PENDING_ALPACA' RETURNING *`,
             [failStatus, tx.blockchain_tx]
@@ -625,7 +625,7 @@ async function start() {
 
   // Start the Lazy Reconciliation loop 
   // (Runs every 60 seconds, but 99.9% of the time it only hits the DB and makes 0 API calls to Alpaca)
-  setInterval(reconcilePendingOrders, 60000);
+  // setInterval(reconcilePendingOrders, 60000);
 
   await syncBacklog(); // incase our backend server is down we have to re run back end again so this function will sync the block the backend failed to capture while its down
 

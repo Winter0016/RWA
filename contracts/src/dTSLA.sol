@@ -403,6 +403,14 @@ contract dTSLA is
                                 OVERRIDES
     //////////////////////////////////////////////////////////////*/
 
+    function name() public view virtual override returns (string memory) {
+        return "dTSLA";
+    }
+
+    function symbol() public view virtual override returns (string memory) {
+        return "dTSLA";
+    }
+
     function _update(
         address from,
         address to,
