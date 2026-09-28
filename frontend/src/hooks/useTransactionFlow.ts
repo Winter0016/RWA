@@ -52,11 +52,17 @@ export function useTransactionFlow() {
       processedTxRef.current.add(wsData.transactionHash);
 
       if (wsData.status === 'READY_TO_CLAIM') {
-        await resumeClaim(wsData.transactionHash);
+        setTimeout(async () => {
+          await resumeClaim(wsData.transactionHash);
+        }, 3000);
       } else if (wsData.status === 'READY_TO_CLAIM_USDC') {
-        await resumeRedeem(wsData.transactionHash);
+        setTimeout(async () => {
+          await resumeRedeem(wsData.transactionHash);
+        }, 3000);
       } else if (wsData.status === 'FAILED' || wsData.status === 'CANCELED_BY_ADMIN') {
-        await resumeRefund(wsData.transactionHash);
+        setTimeout(async () => {
+          await resumeRefund(wsData.transactionHash);
+        }, 3000);
       }
     };
 
