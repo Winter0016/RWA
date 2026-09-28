@@ -78,7 +78,7 @@ const resolvers = {
             [
               wallet_address,
               parseUnits(tx.usdc_amount.toString(), 6), // USDC uses 6 decimals
-              parseEther(tx.dtsla_amount.toString()),
+              parseUnits(tx.dtsla_amount.toString(), 18),
               BigInt(timestamp),
               "claimMint"
             ]
@@ -94,7 +94,7 @@ const resolvers = {
           signature
         };
 
-        await redisClient.setEx(`ClaimSig:${transactionHash}`, 86400, JSON.stringify(result));
+        await redisClient.setEx(`ClaimSig:${transactionHash}`, 280, JSON.stringify(result));
         return result;
       } finally {
         await redisClient.del(lockKey);
@@ -148,7 +148,7 @@ const resolvers = {
             ['address', 'uint256', 'uint256', 'uint256', 'string'],
             [
               wallet_address,
-              parseEther(tx.dtsla_amount.toString()),
+              parseUnits(tx.dtsla_amount.toString(), 18),
               parseUnits(tx.usdc_amount.toString(), 6), // USDC uses 6 decimals
               BigInt(timestamp),
               "redeem"
@@ -165,7 +165,7 @@ const resolvers = {
           signature
         };
 
-        await redisClient.setEx(`ClaimUSDCSig:${transactionHash}`, 86400, JSON.stringify(result));
+        await redisClient.setEx(`ClaimUSDCSig:${transactionHash}`, 280, JSON.stringify(result));
         return result;
       } finally {
         await redisClient.del(lockKey);
@@ -234,7 +234,7 @@ const resolvers = {
               ['address', 'uint256', 'uint256', 'string'],
               [
                 wallet_address,
-                parseEther(tx.dtsla_amount.toString()),
+                parseUnits(tx.dtsla_amount.toString(), 18),
                 BigInt(timestamp),
                 "cancelRedeem"
               ]
@@ -255,7 +255,7 @@ const resolvers = {
         };
 
         // Cache it for 24 hours
-        await redisClient.setEx(`RefundSig:${transactionHash}`, 86400, JSON.stringify(result));
+        await redisClient.setEx(`RefundSig:${transactionHash}`, 280, JSON.stringify(result));
 
         return result;
       } finally {
@@ -582,7 +582,7 @@ const resolvers = {
               ['address', 'uint256', 'uint256', 'string'],
               [
                 tx.wallet_address,
-                parseEther(tx.dtsla_amount.toString()),
+                parseUnits(tx.dtsla_amount.toString(), 18),
                 BigInt(timestamp),
                 "cancelRedeem"
               ]
@@ -599,7 +599,7 @@ const resolvers = {
           signature
         };
 
-        await redisClient.setEx(`RefundSig:${transactionHash}`, 86400, JSON.stringify(result));
+        await redisClient.setEx(`RefundSig:${transactionHash}`, 280, JSON.stringify(result));
         return result;
       } finally {
         await redisClient.del(lockKey);

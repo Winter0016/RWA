@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { createPublicClient, http, webSocket, parseAbiItem } = require('viem');
+const { createPublicClient, http, webSocket, parseAbiItem, formatUnits, parseUnits } = require('viem');
 const pool = require('./db');
 const { alpaca } = require('./alpaca');
 const { redisClient } = require('./redis');
@@ -45,7 +45,7 @@ async function handleDeposit(log) {
   const { transactionHash, args } = log;
   const { user, usdcAmount, signature } = args;
 
-  const fiatAmount = Number(usdcAmount) / 1e6; // Convert from 6 decimals (USDC)
+  const fiatAmount = formatUnits(usdcAmount, 6); // Lossless exact string from 6 decimals (USDC)
 
   console.log(`\n🎉 Caught DepositReceived Event in tx: ${transactionHash}`);
   console.log(`User ${user} locked $${fiatAmount} for dTSLA minting`);
@@ -59,7 +59,7 @@ async function handleDeposit(log) {
     }
 
     // 2. We need the user_id from the wallet address
-    const userRes = await pool.query('SELECT id FROM users WHERE wallet_address = $1', [user]);
+    const userRes = await pool.query('SELECT id FROM users WHERE LOWER(wallet_address) = LOWER($1)', [user]);
     if (userRes.rows.length === 0) {
       console.error(`Unknown user wallet: ${user}`);
       return;
@@ -78,7 +78,7 @@ async function handleDeposit(log) {
     await redisClient.incrByFloat('alpaca:reserved_buying_power', -fiatAmount);
 
     // 5. Execute Trade on Alpaca
-    const roundedNotional = parseFloat(fiatAmount.toFixed(2));
+    const roundedNotional = parseFloat(Number(fiatAmount).toFixed(2));
     await alpaca.trading.orders.market({
       symbol: 'TSLA',
       side: 'buy',
@@ -122,12 +122,12 @@ async function handleMinted(log) {
   const { transactionHash, args } = log;
   const { user, usdcAmount } = args;
 
-  const fiatAmount = Number(usdcAmount) / 1e6;
+  const fiatAmount = formatUnits(usdcAmount, 6);
 
   console.log(`\n🎉 Caught Minted Event in tx: ${transactionHash}`);
 
   try {
-    const userRes = await pool.query('SELECT id FROM users WHERE wallet_address = $1', [user]);
+    const userRes = await pool.query('SELECT id FROM users WHERE LOWER(wallet_address) = LOWER($1)', [user]);
     if (userRes.rows.length === 0) return;
     const user_id = userRes.rows[0].id;
 
@@ -165,7 +165,7 @@ async function handleRedeemRequested(log) {
   const { transactionHash, args } = log;
   const { user, dTslaAmount } = args;
 
-  const shares = Number(dTslaAmount) / 1e18; // Convert from 18 decimals
+  const shares = formatUnits(dTslaAmount, 18); // Lossless exact string from 18 decimals
 
   console.log(`\n🔥 Caught RedeemRequested Event in tx: ${transactionHash}`);
   console.log(`User ${user} locked ${shares} dTSLA to redeem`);
@@ -175,7 +175,7 @@ async function handleRedeemRequested(log) {
     const checkTx = await pool.query('SELECT * FROM transactions WHERE blockchain_tx = $1', [transactionHash]);
     if (checkTx.rows.length > 0) return;
 
-    const userRes = await pool.query('SELECT id FROM users WHERE wallet_address = $1', [user]);
+    const userRes = await pool.query('SELECT id FROM users WHERE LOWER(wallet_address) = LOWER($1)', [user]);
     if (userRes.rows.length === 0) return;
     const user_id = userRes.rows[0].id;
 
@@ -187,7 +187,7 @@ async function handleRedeemRequested(log) {
     );
 
     // 3. Execute Trade on Alpaca (Sell the shares)
-    const roundedShares = parseFloat(shares.toFixed(9));
+    const roundedShares = parseFloat(Number(shares).toFixed(9));
     await alpaca.trading.orders.market({
       symbol: 'TSLA',
       side: 'sell',
@@ -234,7 +234,7 @@ async function handleRedeem(log) {
   console.log(`\n🔥 Caught Redeemed Event in tx: ${transactionHash}`);
 
   try {
-    const userRes = await pool.query('SELECT id FROM users WHERE wallet_address = $1', [user]);
+    const userRes = await pool.query('SELECT id FROM users WHERE LOWER(wallet_address) = LOWER($1)', [user]);
     if (userRes.rows.length === 0) return;
     const user_id = userRes.rows[0].id;
 
@@ -271,7 +271,7 @@ async function handleMintCanceled(log) {
 
   console.log(`\n🎉 Caught MintCanceled Event in tx: ${transactionHash}`);
   try {
-    const userRes = await pool.query('SELECT id FROM users WHERE wallet_address = $1', [user]);
+    const userRes = await pool.query('SELECT id FROM users WHERE LOWER(wallet_address) = LOWER($1)', [user]);
     if (userRes.rows.length === 0) return;
     const user_id = userRes.rows[0].id;
 
@@ -302,7 +302,7 @@ async function handleRedeemCanceled(log) {
 
   console.log(`\n🔥 Caught RedeemCanceled Event in tx: ${transactionHash}`);
   try {
-    const userRes = await pool.query('SELECT id FROM users WHERE wallet_address = $1', [user]);
+    const userRes = await pool.query('SELECT id FROM users WHERE LOWER(wallet_address) = LOWER($1)', [user]);
     if (userRes.rows.length === 0) return;
     const user_id = userRes.rows[0].id;
 
@@ -359,17 +359,20 @@ function setupAlpacaWebSocket() {
              SET dtsla_amount = $1, status = 'READY_TO_CLAIM' 
              WHERE blockchain_tx = $2 AND status = 'PENDING_ALPACA'
              RETURNING *`,
-            [Number(filled_qty), client_order_id]
+            [filled_qty, client_order_id]
           );
           newStatus = 'READY_TO_CLAIM';
         } else if (txType === 'REDEEM') {
-          const usdcFilled = parseFloat(filled_avg_price) * parseFloat(filled_qty);
+          const priceWei = parseUnits(filled_avg_price, 6);
+          const qtyWei = parseUnits(filled_qty, 18);
+          const usdcFilledWei = (priceWei * qtyWei) / 10n ** 18n;
+          const usdcFilledStr = formatUnits(usdcFilledWei, 6);
           updateRes = await pool.query(
             `UPDATE transactions 
              SET usdc_amount = $1, status = 'READY_TO_CLAIM_USDC' 
              WHERE blockchain_tx = $2 AND status = 'PENDING_ALPACA'
              RETURNING *`,
-            [usdcFilled, client_order_id]
+            [usdcFilledStr, client_order_id]
           );
           newStatus = 'READY_TO_CLAIM_USDC';
         }
@@ -460,17 +463,20 @@ async function reconcilePendingOrders() {
                SET dtsla_amount = $1, status = 'READY_TO_CLAIM' 
                WHERE blockchain_tx = $2 AND status = 'PENDING_ALPACA'
                RETURNING *`,
-              [Number(order.filled_qty), tx.blockchain_tx]
+              [order.filled_qty, tx.blockchain_tx]
             );
             newStatus = 'READY_TO_CLAIM';
           } else if (tx.type === 'REDEEM') {
-            const usdcFilled = parseFloat(order.filled_avg_price) * parseFloat(order.filled_qty);
+            const priceWei = parseUnits(order.filled_avg_price, 6);
+            const qtyWei = parseUnits(order.filled_qty, 18);
+            const usdcFilledWei = (priceWei * qtyWei) / 10n ** 18n;
+            const usdcFilledStr = formatUnits(usdcFilledWei, 6);
             updateRes = await pool.query(
               `UPDATE transactions 
                SET usdc_amount = $1, status = 'READY_TO_CLAIM_USDC' 
                WHERE blockchain_tx = $2 AND status = 'PENDING_ALPACA'
                RETURNING *`,
-              [usdcFilled, tx.blockchain_tx]
+              [usdcFilledStr, tx.blockchain_tx]
             );
             newStatus = 'READY_TO_CLAIM_USDC';
           }
@@ -627,7 +633,7 @@ async function start() {
 
   // Start the Lazy Reconciliation loop 
   // (Runs every 60 seconds, but 99.9% of the time it only hits the DB and makes 0 API calls to Alpaca)
-  // setInterval(reconcilePendingOrders, 60000);
+  setInterval(reconcilePendingOrders, 60000);
 
   await syncBacklog(); // incase our backend server is down we have to re run back end again so this function will sync the block the backend failed to capture while its down
 

@@ -36,16 +36,16 @@ const typeDefs = `#graphql
     user_id: ID!
     wallet_address: String
     type: TransactionType!
-    usdc_amount: Float!
-    dtsla_amount: Float!
+    usdc_amount: String!
+    dtsla_amount: String!
     status: TransactionStatus!
     blockchain_tx: String
     created_at: String!
   }
 
   type Quote {
-    usdcAmount: Float!
-    dTslaAmount: Float!
+    usdcAmount: String!
+    dTslaAmount: String!
     timestamp: Float!
     signature: String!
   }
@@ -95,7 +95,7 @@ const typeDefs = `#graphql
   # -----------------------------------------
   type Mutation {
     # Called by frontend to lock fiat balance BEFORE depositing on-chain
-    reserveMintPower(usdcAmount: Float!, wallet_address: String!): Quote
+    reserveMintPower(usdcAmount: String!, wallet_address: String!): Quote
     
     # Called when a user logs in for the very first time
     addUser(

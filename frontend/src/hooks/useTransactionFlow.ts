@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApolloClient } from '@apollo/client/react';
 import { useWallets } from '@privy-io/react-auth';
 import { io, Socket } from 'socket.io-client';
@@ -22,6 +22,7 @@ export type TxState =
 export function useTransactionFlow() {
   const [state, setState] = useState<TxState>('IDLE');
   const [txType, setTxType] = useState<'MINT'|'REDEEM'|'REFUND'>('MINT');
+  const processedTxRef = useRef<Set<string>>(new Set());
 
   const { wallets } = useWallets();
   const activeWallet = wallets[0];
@@ -43,6 +44,12 @@ export function useTransactionFlow() {
 
     const handleTransactionReady = async (wsData: any) => {
       console.log("Central WebSocket listener caught event:", wsData);
+      
+      if (processedTxRef.current.has(wsData.transactionHash)) {
+        console.log("Ignoring duplicate websocket event for:", wsData.transactionHash);
+        return;
+      }
+      processedTxRef.current.add(wsData.transactionHash);
 
       if (wsData.status === 'READY_TO_CLAIM') {
         await resumeClaim(wsData.transactionHash);
@@ -84,7 +91,7 @@ export function useTransactionFlow() {
       const { data } = await apolloClient.mutate({
         mutation: RESERVE_MINT_POWER,
         variables: {
-          usdcAmount: parseFloat(usdcAmount),
+          usdcAmount: usdcAmount,
           walletAddress: smartAccount.address // The Smart Account is msg.sender!
         }
       });
@@ -146,8 +153,8 @@ export function useTransactionFlow() {
 
       const claimData = (claimRes.data as any).getClaimSignature;
 
-      const usdcConsumedWei = parseUnits(Number(claimData.usdcAmount).toFixed(6), 6);
-      const dTslaAmountWei = parseUnits(Number(claimData.dTslaAmount).toFixed(18), 18);
+      const usdcConsumedWei = parseUnits(claimData.usdcAmount, 6);
+      const dTslaAmountWei = parseUnits(claimData.dTslaAmount, 18);
 
       // 6. Encode Smart Contract Data for claimMint
       const claimCallData = encodeFunctionData({
@@ -217,8 +224,8 @@ export function useTransactionFlow() {
 
       const claimData = (claimRes.data as any).getClaimUSDCSignature;
 
-      const usdcAmountWei = parseUnits(Number(claimData.usdcAmount).toFixed(6), 6);
-      const dTslaAmountWei = parseUnits(Number(claimData.dTslaAmount).toFixed(18), 18);
+      const usdcAmountWei = parseUnits(claimData.usdcAmount, 6);
+      const dTslaAmountWei = parseUnits(claimData.dTslaAmount, 18);
 
       const redeemCallData = encodeFunctionData({
         abi: DTSLA_ABI,
@@ -253,8 +260,8 @@ export function useTransactionFlow() {
       });
 
       const refundData = (refundRes.data as any).getRefundSignature;
-      const usdcAmountWei = parseUnits(Number(refundData.usdcAmount).toFixed(6), 6);
-      const dTslaAmountWei = parseUnits(Number(refundData.dTslaAmount).toFixed(18), 18);
+      const usdcAmountWei = parseUnits(refundData.usdcAmount, 6);
+      const dTslaAmountWei = parseUnits(refundData.dTslaAmount, 18);
 
       let refundCallData;
       if (dTslaAmountWei > BigInt(0)) {
@@ -299,8 +306,8 @@ export function useTransactionFlow() {
       });
 
       const refundData = (cancelRes.data as any).cancelPendingTransaction;
-      const usdcAmountWei = parseUnits(Number(refundData.usdcAmount).toFixed(6), 6);
-      const dTslaAmountWei = parseUnits(Number(refundData.dTslaAmount).toFixed(18), 18);
+      const usdcAmountWei = parseUnits(refundData.usdcAmount, 6);
+      const dTslaAmountWei = parseUnits(refundData.dTslaAmount, 18);
 
       let refundCallData;
       if (dTslaAmountWei > BigInt(0)) {

@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 
 export const RESERVE_MINT_POWER = gql`
-  mutation ReserveMintPower($usdcAmount: Float!, $walletAddress: String!) {
+  mutation ReserveMintPower($usdcAmount: String!, $walletAddress: String!) {
     reserveMintPower(usdcAmount: $usdcAmount, wallet_address: $walletAddress) {
       timestamp
       signature
