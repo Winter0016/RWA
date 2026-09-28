@@ -64,9 +64,7 @@ const resolvers = {
       await redisClient.expire(lockKey, 10);
 
       try {
-        // Double check cache inside the lock
-        const doubleCheck = await redisClient.get(`ClaimSig:${transactionHash}`);
-        if (doubleCheck) return JSON.parse(doubleCheck);
+
 
         // 5. Generate Signature
         const timestamp = Math.floor(Date.now() / 1000);
@@ -136,8 +134,7 @@ const resolvers = {
       await redisClient.expire(lockKey, 10);
 
       try {
-        const doubleCheck = await redisClient.get(`ClaimUSDCSig:${transactionHash}`);
-        if (doubleCheck) return JSON.parse(doubleCheck);
+
 
         // 5. Generate Signature
         const timestamp = Math.floor(Date.now() / 1000);
@@ -196,8 +193,7 @@ const resolvers = {
       await redisClient.expire(lockKey, 10);
 
       try {
-        const doubleCheck = await redisClient.get(`RefundSig:${transactionHash}`);
-        if (doubleCheck) return JSON.parse(doubleCheck);
+
 
         // 3. Fetch the user's wallet address
         const userRes = await pool.query('SELECT wallet_address FROM users WHERE id = $1', [tx.user_id]);
@@ -558,8 +554,7 @@ const resolvers = {
       await redisClient.expire(lockKey, 10);
 
       try {
-        const doubleCheck = await redisClient.get(`RefundSig:${transactionHash}`);
-        if (doubleCheck) return JSON.parse(doubleCheck);
+
 
         const timestamp = Math.floor(Date.now() / 1000);
         let messageHash;
