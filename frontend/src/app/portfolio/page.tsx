@@ -13,10 +13,16 @@ import { RedeemModal } from '@/components/RedeemModal';
 
 const truncateDecimals = (val: number | string, decimals: number = 6) => {
   if (!val) return '0';
-  // Force javascript to expand scientific notation out to 18 decimals
-  let str = Number(val).toFixed(18); 
-  // Strip off all the useless trailing zeroes at the very end
-  str = str.replace(/\.?0+$/, ''); 
+  let str = val.toString();
+  if (str.includes('.')) {
+    const parts = str.split('.');
+    if (parts[1].length > decimals) {
+      parts[1] = parts[1].substring(0, decimals);
+    }
+    str = parts.join('.');
+    // Strip off trailing zeroes
+    str = str.replace(/\.?0+$/, '');
+  }
   return str === '' ? '0' : str;
 };
 

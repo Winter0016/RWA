@@ -12,10 +12,15 @@ import { DTSLA_ADDRESS, DTSLA_ABI, USDC_ADDRESS, USDC_ABI } from '@/constants/co
 
 const truncateDecimals = (val: number | string, decimals: number = 6) => {
   if (!val) return '0';
-  // Force javascript to expand scientific notation out to 18 decimals
-  let str = Number(val).toFixed(18); 
-  // Strip off all the useless trailing zeroes at the very end
-  str = str.replace(/\.?0+$/, ''); 
+  let str = val.toString();
+  if (str.includes('.')) {
+    const parts = str.split('.');
+    if (parts[1].length > decimals) {
+      parts[1] = parts[1].substring(0, decimals);
+    }
+    str = parts.join('.');
+    str = str.replace(/\.?0+$/, '');
+  }
   return str === '' ? '0' : str;
 };
 
@@ -46,7 +51,7 @@ export default function AdminPage() {
   // Listen for real-time global transaction updates
   useEffect(() => {
     const socket = io(process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000');
-    
+
     socket.on('global_transaction_update', (data) => {
       console.log('Global transaction update received:', data);
       refetchTxs(); // Silently refetch the transactions list!
@@ -70,7 +75,7 @@ export default function AdminPage() {
           chain: arbitrumSepolia,
           transport: http('https://sepolia-rollup.arbitrum.io/rpc')
         });
-        
+
         const [supply, usdcBal, paused] = await Promise.all([
           publicClient.readContract({
             address: DTSLA_ADDRESS as `0x${string}`,
@@ -89,7 +94,7 @@ export default function AdminPage() {
             functionName: 'paused'
           })
         ]);
-        
+
         setChainSupply(Number(formatUnits(supply as bigint, 18)));
         setChainUsdcBalance(Number(formatUnits(usdcBal as bigint, 6))); // USDC uses 6 decimals
         setIsPaused(paused as boolean);
@@ -152,14 +157,14 @@ export default function AdminPage() {
       alert(`Transaction submitted (Hash: ${txHash}). Waiting for confirmation...`);
 
       // Wait for the transaction to be mined and check if it succeeded
-      const receipt = await publicClient.waitForTransactionReceipt({ 
-        hash: txHash as `0x${string}` 
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash as `0x${string}`
       });
 
       if (receipt.status !== 'success') {
         throw new Error("Transaction reverted on-chain after passing simulation. This is usually due to a gas spike or race condition.");
       }
-      
+
       if (isContract) {
         await upsertContract({
           variables: {
@@ -183,7 +188,7 @@ export default function AdminPage() {
       setWhitelistModal(null);
     } catch (err: any) {
       console.error("Whitelist failed:", err);
-      
+
       let parsedErrorMessage = err.message || typeof err === 'string' ? err : "Unknown error";
       const hexMatch = parsedErrorMessage?.match(/0x[a-fA-F0-9]{8,}/);
       if (hexMatch) {
@@ -193,7 +198,7 @@ export default function AdminPage() {
             abi: DTSLA_ABI,
             data: hexMatch[0] as `0x${string}`
           });
-          parsedErrorMessage = decoded.errorName === 'Error' && decoded.args 
+          parsedErrorMessage = decoded.errorName === 'Error' && decoded.args
             ? `Smart Contract Revert: ${decoded.args[0]}`
             : `Smart Contract Revert: ${decoded.errorName}`;
         } catch (decodeErr) {
@@ -216,28 +221,28 @@ export default function AdminPage() {
         alert("Error: You do not have a connected wallet. Please connect your admin wallet to sign transactions.");
         return;
       }
-      
+
       const activeWallet = wallets[0];
       const functionName = isPaused ? 'unpause' : 'pause';
-      
+
       const data = encodeFunctionData({
         abi: DTSLA_ABI,
         functionName: functionName,
       });
-      
+
       // 1. Simulate the transaction first
       const publicClient = createPublicClient({
         chain: arbitrumSepolia,
         transport: http('https://sepolia-rollup.arbitrum.io/rpc')
       });
-      
+
       await publicClient.simulateContract({
         address: DTSLA_ADDRESS as `0x${string}`,
         abi: DTSLA_ABI,
         functionName: functionName,
         account: activeWallet.address as `0x${string}`
       });
-      
+
       // 2. Use the active wallet's provider directly
       const provider = await activeWallet.getEthereumProvider();
       const txHash = await provider.request({
@@ -249,23 +254,23 @@ export default function AdminPage() {
           chainId: '0x66EE6'
         }]
       });
-      
+
       alert(`Transaction submitted (Hash: ${txHash}). Waiting for confirmation...`);
 
       // 3. Wait for the transaction to be mined
-      const receipt = await publicClient.waitForTransactionReceipt({ 
-        hash: txHash as `0x${string}` 
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash as `0x${string}`
       });
 
       if (receipt.status !== 'success') {
         throw new Error("Transaction reverted on-chain after passing simulation. This is usually due to a gas spike or race condition.");
       }
-      
+
       alert(`Successfully submitted ${functionName} transaction!\nTx Hash: ${txHash}`);
       setIsPaused(!isPaused);
     } catch (err: any) {
       console.error("Pause toggle failed:", err);
-      
+
       let parsedErrorMessage = err.message || typeof err === 'string' ? err : "Unknown error";
       const hexMatch = parsedErrorMessage?.match(/0x[a-fA-F0-9]{8,}/);
       if (hexMatch) {
@@ -275,7 +280,7 @@ export default function AdminPage() {
             abi: DTSLA_ABI,
             data: hexMatch[0] as `0x${string}`
           });
-          parsedErrorMessage = decoded.errorName === 'Error' && decoded.args 
+          parsedErrorMessage = decoded.errorName === 'Error' && decoded.args
             ? `Smart Contract Revert: ${decoded.args[0]}`
             : `Smart Contract Revert: ${decoded.errorName}`;
         } catch (decodeErr) {
@@ -317,15 +322,15 @@ export default function AdminPage() {
 
   // Calculate Metrics from global transaction history
   const allTx = txData?.getAllTransactions || [];
-  
+
   const totalMintedDTSLA = allTx
     .filter((tx: any) => tx.type === 'MINT' && tx.status === 'COMPLETED')
     .reduce((sum: number, tx: any) => sum + Number(tx.dtsla_amount || 0), 0);
-    
+
   const totalRedeemedDTSLA = allTx
     .filter((tx: any) => tx.type === 'REDEEM' && tx.status === 'COMPLETED')
     .reduce((sum: number, tx: any) => sum + Number(tx.dtsla_amount || 0), 0);
-    
+
   const currentDTSLASupply = totalMintedDTSLA - totalRedeemedDTSLA;
 
   const totalUSDCVolume = allTx
@@ -348,11 +353,10 @@ export default function AdminPage() {
           <button
             onClick={handleTogglePause}
             disabled={isTogglingPause}
-            className={`px-6 py-2.5 font-bold rounded-xl transition-all shadow-lg flex items-center space-x-2 ${
-              isPaused 
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500/20' 
+            className={`px-6 py-2.5 font-bold rounded-xl transition-all shadow-lg flex items-center space-x-2 ${isPaused
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500/20'
                 : 'bg-red-500/10 text-red-400 border border-red-500/50 hover:bg-red-500/20'
-            }`}
+              }`}
           >
             <span>{isTogglingPause ? 'Processing...' : (isPaused ? 'UNPAUSE PROTOCOL' : 'PAUSE PROTOCOL')}</span>
           </button>
@@ -365,12 +369,12 @@ export default function AdminPage() {
             <div className="flex justify-between items-end">
               <div>
                 <div className="text-xs text-zinc-500 mb-1">Database (Indexer)</div>
-                <div className="text-2xl font-bold text-white font-mono">{currentDTSLASupply.toString()}</div>
+                <div className="text-2xl font-bold text-white font-mono">{truncateDecimals(currentDTSLASupply, 6)}</div>
               </div>
               <div className="text-right">
                 <div className="text-xs text-blue-400/80 mb-1">Blockchain (Arbitrum)</div>
                 <div className="text-2xl font-bold text-blue-400 font-mono">
-                  {chainSupply !== null ? chainSupply.toString() : '...'}
+                  {chainSupply !== null ? truncateDecimals(chainSupply, 6) : '...'}
                 </div>
               </div>
             </div>
@@ -385,13 +389,13 @@ export default function AdminPage() {
               <div>
                 <div className="text-xs text-zinc-500 mb-1">Database (Indexer)</div>
                 <div className="text-2xl font-bold text-emerald-400 font-mono">
-                  ${totalUSDCVolume.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}
+                  ${truncateDecimals(totalUSDCVolume, 6)}
                 </div>
               </div>
               <div className="text-right">
                 <div className="text-xs text-blue-400/80 mb-1">Blockchain (Arbitrum)</div>
                 <div className="text-2xl font-bold text-blue-400 font-mono">
-                  {chainUsdcBalance !== null ? `$${chainUsdcBalance.toLocaleString(undefined, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}` : '...'}
+                  {chainUsdcBalance !== null ? `$${truncateDecimals(chainUsdcBalance, 6)}` : '...'}
                 </div>
               </div>
             </div>
@@ -563,8 +567,8 @@ export default function AdminPage() {
             <form onSubmit={handleAddContract} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl flex gap-4 items-end">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-zinc-400 mb-2">Protocol Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={newContractName}
                   onChange={(e) => setNewContractName(e.target.value)}
                   placeholder="e.g. Uniswap V3 Router"
@@ -574,8 +578,8 @@ export default function AdminPage() {
               </div>
               <div className="flex-1">
                 <label className="block text-sm font-medium text-zinc-400 mb-2">Contract Address</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={newContractAddress}
                   onChange={(e) => setNewContractAddress(e.target.value)}
                   placeholder="0x..."
@@ -583,7 +587,7 @@ export default function AdminPage() {
                   required
                 />
               </div>
-              <button 
+              <button
                 type="submit"
                 disabled={addingContract || whitelisting !== null}
                 className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50 h-11.5"
@@ -634,8 +638,8 @@ export default function AdminPage() {
                                   : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400'
                                 }`}
                             >
-                              {whitelisting === c.contract_address 
-                                ? 'Processing...' 
+                              {whitelisting === c.contract_address
+                                ? 'Processing...'
                                 : c.is_whitelisted ? 'Revoke' : 'Approve'}
                             </button>
                           </td>
@@ -661,27 +665,27 @@ export default function AdminPage() {
       {whitelistModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-[#0B0F19] border border-[#1E293B] rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
-            <button 
+            <button
               onClick={() => setWhitelistModal(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
             >
               ✕
             </button>
-            
+
             <h2 className="text-xl font-semibold text-white mb-2">Manage Whitelist</h2>
             <p className="text-slate-400 text-sm mb-6">
               Update whitelist status for <strong>{whitelistModal.name}</strong> ({whitelistModal.targetAddress.slice(0, 6)}...{whitelistModal.targetAddress.slice(-4)}).
             </p>
-            
+
             <div className="flex gap-4">
-              <button 
+              <button
                 onClick={() => executeWhitelist(whitelistModal.targetAddress, true, false, '')}
                 disabled={whitelisting === whitelistModal.targetAddress}
                 className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
               >
                 Approve (True)
               </button>
-              <button 
+              <button
                 onClick={() => executeWhitelist(whitelistModal.targetAddress, false, false, '')}
                 disabled={whitelisting === whitelistModal.targetAddress}
                 className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"

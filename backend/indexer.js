@@ -342,7 +342,7 @@ function setupAlpacaWebSocket() {
     const { client_order_id, filled_qty, filled_avg_price, symbol, side } = order;
 
     if (event === 'fill' || event === 'partial_fill') {
-      console.log(`\n🔔 TRADE FILLED: ${side} ${filled_qty} ${symbol} @ $${filled_avg_price}`);
+      console.log(`\n🔔 TRADE ${event.toUpperCase()}: ${side} ${filled_qty} ${symbol} @ $${filled_avg_price}`);
       console.log(`Client Order ID: ${client_order_id}`);
 
       try {
@@ -354,17 +354,41 @@ function setupAlpacaWebSocket() {
         let newStatus = '';
 
         if (txType === 'MINT') {
+          // If it's a partial_fill, we shouldn't mark it READY_TO_CLAIM yet because the order is still open!
+          // But for simplicity in this MVP, we will only transition when the order is completely filled.
+          if (event === 'partial_fill') {
+            console.log(`⏳ Order ${client_order_id} partially filled. Waiting for full fill...`);
+            return;
+          }
+
           updateRes = await pool.query(
             `UPDATE transactions 
              SET dtsla_amount = $1, status = 'READY_TO_CLAIM' 
              WHERE blockchain_tx = $2 AND status = 'PENDING_ALPACA'
              RETURNING *`,
-            [filled_qty, client_order_id]
+            [String(filled_qty), client_order_id]
           );
           newStatus = 'READY_TO_CLAIM';
         } else if (txType === 'REDEEM') {
-          const priceWei = parseUnits(filled_avg_price, 6);
-          const qtyWei = parseUnits(filled_qty, 18);
+          if (event === 'partial_fill') {
+            console.log(`⏳ Order ${client_order_id} partially filled. Waiting for full fill...`);
+            return;
+          }
+
+          // Safely truncate the price to 6 decimals to prevent parseUnits from crashing
+          let safePriceStr = String(filled_avg_price);
+          if (safePriceStr.includes('.')) {
+            safePriceStr = safePriceStr.split('.')[0] + '.' + safePriceStr.split('.')[1].substring(0, 6);
+          }
+          const priceWei = parseUnits(safePriceStr, 6);
+
+          // Safely truncate the qty to 18 decimals
+          let safeQtyStr = String(filled_qty);
+          if (safeQtyStr.includes('.')) {
+            safeQtyStr = safeQtyStr.split('.')[0] + '.' + safeQtyStr.split('.')[1].substring(0, 18);
+          }
+          const qtyWei = parseUnits(safeQtyStr, 18);
+
           const usdcFilledWei = (priceWei * qtyWei) / 10n ** 18n;
           const usdcFilledStr = formatUnits(usdcFilledWei, 6);
           updateRes = await pool.query(
@@ -463,12 +487,22 @@ async function reconcilePendingOrders() {
                SET dtsla_amount = $1, status = 'READY_TO_CLAIM' 
                WHERE blockchain_tx = $2 AND status = 'PENDING_ALPACA'
                RETURNING *`,
-              [order.filled_qty, tx.blockchain_tx]
+              [String(order.filled_qty), tx.blockchain_tx]
             );
             newStatus = 'READY_TO_CLAIM';
           } else if (tx.type === 'REDEEM') {
-            const priceWei = parseUnits(order.filled_avg_price, 6);
-            const qtyWei = parseUnits(order.filled_qty, 18);
+            let safePriceStr = String(order.filled_avg_price);
+            if (safePriceStr.includes('.')) {
+              safePriceStr = safePriceStr.split('.')[0] + '.' + safePriceStr.split('.')[1].substring(0, 6);
+            }
+            const priceWei = parseUnits(safePriceStr, 6);
+
+            let safeQtyStr = String(order.filled_qty);
+            if (safeQtyStr.includes('.')) {
+              safeQtyStr = safeQtyStr.split('.')[0] + '.' + safeQtyStr.split('.')[1].substring(0, 18);
+            }
+            const qtyWei = parseUnits(safeQtyStr, 18);
+
             const usdcFilledWei = (priceWei * qtyWei) / 10n ** 18n;
             const usdcFilledStr = formatUnits(usdcFilledWei, 6);
             updateRes = await pool.query(
