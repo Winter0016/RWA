@@ -132,6 +132,8 @@ export function useGaslessTx() {
     } catch (error: any) {
       console.error("Error sending transaction:", error);
 
+      let parsedErrorMessage = error.message;
+
       // Attempt to decode the custom error selector (e.g., 0xeea732ab) from the Bundler's simulation
       const hexMatch = error.message.match(/0x[a-fA-F0-9]{8,}/);
       if (hexMatch) {
@@ -148,17 +150,16 @@ export function useGaslessTx() {
           console.error("Decoded Custom Error:", decoded);
 
           if (decoded.errorName === 'Error' && decoded.args) {
-            throw new Error(`Transaction failed in smart contract: ${decoded.args[0]}`);
+            parsedErrorMessage = `Transaction failed in smart contract: ${decoded.args[0]}`;
+          } else {
+            parsedErrorMessage = `Transaction failed: ${decoded.errorName}`;
           }
-
-          throw new Error(`Transaction failed: ${decoded.errorName}`);
         } catch (decodeErr) {
-          alert(decodeErr);
           console.log("Could not decode error with DTSLA_ABI:", decodeErr);
         }
       }
 
-      throw new Error(error.message);
+      throw new Error(parsedErrorMessage);
     }
   };
 

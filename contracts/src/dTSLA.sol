@@ -43,6 +43,7 @@ contract dTSLA is
     error dTSLA__NotWhitelisted();
     error dTSLA__HasBalance();
     error dTSLA__HasPendingDeposits();
+    error dTSLA__Paused();
 
     address public i_usdc;
     address public s_oracleSigner;
@@ -416,6 +417,10 @@ contract dTSLA is
         address to,
         uint256 value
     ) internal override {
+        if (paused() && msg.sender != owner()) {
+            revert dTSLA__Paused();
+        }
+        
         // Enforce whitelist check for transfers, mints, and burns
         if (from != address(0) && !isWhitelisted[from]) {
             revert dTSLA__NotWhitelisted();

@@ -60,6 +60,8 @@ export default function AdminPage() {
   // Fetch true on-chain supply and USDC vault balance for Reconciliation
   const [chainSupply, setChainSupply] = useState<number | null>(null);
   const [chainUsdcBalance, setChainUsdcBalance] = useState<number | null>(null);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [isTogglingPause, setIsTogglingPause] = useState(false);
 
   useEffect(() => {
     const fetchChainMetrics = async () => {
@@ -69,7 +71,7 @@ export default function AdminPage() {
           transport: http('https://sepolia-rollup.arbitrum.io/rpc')
         });
         
-        const [supply, usdcBal] = await Promise.all([
+        const [supply, usdcBal, paused] = await Promise.all([
           publicClient.readContract({
             address: DTSLA_ADDRESS as `0x${string}`,
             abi: DTSLA_ABI,
@@ -80,11 +82,17 @@ export default function AdminPage() {
             abi: USDC_ABI,
             functionName: 'balanceOf',
             args: [DTSLA_ADDRESS]
+          }),
+          publicClient.readContract({
+            address: DTSLA_ADDRESS as `0x${string}`,
+            abi: DTSLA_ABI,
+            functionName: 'paused'
           })
         ]);
         
         setChainSupply(Number(formatUnits(supply as bigint, 18)));
         setChainUsdcBalance(Number(formatUnits(usdcBal as bigint, 6))); // USDC uses 6 decimals
+        setIsPaused(paused as boolean);
       } catch (err) {
         console.error("Failed to fetch chain metrics:", err);
       }
@@ -114,6 +122,20 @@ export default function AdminPage() {
 
       console.log(`Executing whitelist for ${targetAddress} (Status: ${status})`);
 
+      const publicClient = createPublicClient({
+        chain: arbitrumSepolia,
+        transport: http('https://sepolia-rollup.arbitrum.io/rpc')
+      });
+
+      // 1. Simulate the transaction first to catch any smart contract reverts BEFORE paying gas
+      await publicClient.simulateContract({
+        address: DTSLA_ADDRESS as `0x${string}`,
+        abi: DTSLA_ABI,
+        functionName: 'setWhitelist',
+        args: [targetAddress as `0x${string}`, status],
+        account: activeWallet.address as `0x${string}`
+      });
+
       // Use the active wallet's provider directly to bypass Privy's ambiguity
       const provider = await activeWallet.getEthereumProvider();
       const txHash = await provider.request({
@@ -127,6 +149,16 @@ export default function AdminPage() {
       });
 
       console.log("Whitelist tx hash:", txHash);
+      alert(`Transaction submitted (Hash: ${txHash}). Waiting for confirmation...`);
+
+      // Wait for the transaction to be mined and check if it succeeded
+      const receipt = await publicClient.waitForTransactionReceipt({ 
+        hash: txHash as `0x${string}` 
+      });
+
+      if (receipt.status !== 'success') {
+        throw new Error("Transaction reverted on-chain after passing simulation. This is usually due to a gas spike or race condition.");
+      }
       
       if (isContract) {
         await upsertContract({
@@ -151,9 +183,109 @@ export default function AdminPage() {
       setWhitelistModal(null);
     } catch (err: any) {
       console.error("Whitelist failed:", err);
-      alert(`Whitelist failed: ${err.message || err}`);
+      
+      let parsedErrorMessage = err.message || typeof err === 'string' ? err : "Unknown error";
+      const hexMatch = parsedErrorMessage?.match(/0x[a-fA-F0-9]{8,}/);
+      if (hexMatch) {
+        try {
+          const { decodeErrorResult } = await import('viem');
+          const decoded = decodeErrorResult({
+            abi: DTSLA_ABI,
+            data: hexMatch[0] as `0x${string}`
+          });
+          parsedErrorMessage = decoded.errorName === 'Error' && decoded.args 
+            ? `Smart Contract Revert: ${decoded.args[0]}`
+            : `Smart Contract Revert: ${decoded.errorName}`;
+        } catch (decodeErr) {
+          console.log("Could not decode error:", decodeErr);
+        }
+      }
+
+      alert(`Whitelist failed: ${parsedErrorMessage}`);
+      return false;
     } finally {
       setWhitelisting(null);
+    }
+    return true;
+  };
+
+  const handleTogglePause = async () => {
+    try {
+      setIsTogglingPause(true);
+      if (!wallets || wallets.length === 0) {
+        alert("Error: You do not have a connected wallet. Please connect your admin wallet to sign transactions.");
+        return;
+      }
+      
+      const activeWallet = wallets[0];
+      const functionName = isPaused ? 'unpause' : 'pause';
+      
+      const data = encodeFunctionData({
+        abi: DTSLA_ABI,
+        functionName: functionName,
+      });
+      
+      // 1. Simulate the transaction first
+      const publicClient = createPublicClient({
+        chain: arbitrumSepolia,
+        transport: http('https://sepolia-rollup.arbitrum.io/rpc')
+      });
+      
+      await publicClient.simulateContract({
+        address: DTSLA_ADDRESS as `0x${string}`,
+        abi: DTSLA_ABI,
+        functionName: functionName,
+        account: activeWallet.address as `0x${string}`
+      });
+      
+      // 2. Use the active wallet's provider directly
+      const provider = await activeWallet.getEthereumProvider();
+      const txHash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: activeWallet.address,
+          to: DTSLA_ADDRESS,
+          data,
+          chainId: '0x66EE6'
+        }]
+      });
+      
+      alert(`Transaction submitted (Hash: ${txHash}). Waiting for confirmation...`);
+
+      // 3. Wait for the transaction to be mined
+      const receipt = await publicClient.waitForTransactionReceipt({ 
+        hash: txHash as `0x${string}` 
+      });
+
+      if (receipt.status !== 'success') {
+        throw new Error("Transaction reverted on-chain after passing simulation. This is usually due to a gas spike or race condition.");
+      }
+      
+      alert(`Successfully submitted ${functionName} transaction!\nTx Hash: ${txHash}`);
+      setIsPaused(!isPaused);
+    } catch (err: any) {
+      console.error("Pause toggle failed:", err);
+      
+      let parsedErrorMessage = err.message || typeof err === 'string' ? err : "Unknown error";
+      const hexMatch = parsedErrorMessage?.match(/0x[a-fA-F0-9]{8,}/);
+      if (hexMatch) {
+        try {
+          const { decodeErrorResult } = await import('viem');
+          const decoded = decodeErrorResult({
+            abi: DTSLA_ABI,
+            data: hexMatch[0] as `0x${string}`
+          });
+          parsedErrorMessage = decoded.errorName === 'Error' && decoded.args 
+            ? `Smart Contract Revert: ${decoded.args[0]}`
+            : `Smart Contract Revert: ${decoded.errorName}`;
+        } catch (decodeErr) {
+          console.log("Could not decode error:", decodeErr);
+        }
+      }
+
+      alert(`Toggle failed: ${parsedErrorMessage}`);
+    } finally {
+      setIsTogglingPause(false);
     }
   };
 
@@ -161,9 +293,11 @@ export default function AdminPage() {
     e.preventDefault();
     if (!newContractAddress || !newContractName) return;
     setAddingContract(true);
-    await executeWhitelist(newContractAddress, true, true, newContractName);
-    setNewContractAddress('');
-    setNewContractName('');
+    const success = await executeWhitelist(newContractAddress, true, true, newContractName);
+    if (success) {
+      setNewContractAddress('');
+      setNewContractName('');
+    }
     setAddingContract(false);
   };
 
@@ -206,9 +340,22 @@ export default function AdminPage() {
       <main className="max-w-360 w-full mx-auto px-6 py-12 space-y-8 ">
 
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Admin Dashboard</h1>
-          <p className="text-zinc-400">Manage users, transactions, and smart contract whitelists.</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Admin Dashboard</h1>
+            <p className="text-zinc-400">Manage users, transactions, and smart contract whitelists.</p>
+          </div>
+          <button
+            onClick={handleTogglePause}
+            disabled={isTogglingPause}
+            className={`px-6 py-2.5 font-bold rounded-xl transition-all shadow-lg flex items-center space-x-2 ${
+              isPaused 
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500/20' 
+                : 'bg-red-500/10 text-red-400 border border-red-500/50 hover:bg-red-500/20'
+            }`}
+          >
+            <span>{isTogglingPause ? 'Processing...' : (isPaused ? 'UNPAUSE PROTOCOL' : 'PAUSE PROTOCOL')}</span>
+          </button>
         </div>
 
         {/* Global Metrics - Proof of Reserves */}

@@ -64,6 +64,17 @@ export const UPDATE_USER_WHITELIST = gql`
   }
 `;
 
+export const CANCEL_PENDING_TRANSACTION = gql`
+  mutation CancelPendingTransaction($transactionHash: String!) {
+    cancelPendingTransaction(transactionHash: $transactionHash) {
+      usdcAmount
+      dTslaAmount
+      timestamp
+      signature
+    }
+  }
+`;
+
 /*
   NOTE: MANUAL AUTHENTICATION EXAMPLE
   

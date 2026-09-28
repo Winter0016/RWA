@@ -18,7 +18,7 @@ const resolvers = {
       );
       const requestedUser = rows[0] || null;
       if (!requestedUser) return null;
-      
+
       // Security check: only allow querying own profile unless caller is admin
       if (requestedUser.privy_id !== context.user.privyUserId) {
         const callerRes = await pool.query('SELECT role FROM users WHERE privy_id = $1', [context.user.privyUserId]);
@@ -54,32 +54,51 @@ const resolvers = {
         throw new Error("User does not have a connected wallet address");
       }
 
-      // 4. Generate Signature
-      const timestamp = Math.floor(Date.now() / 1000);
+      // 4. Check cache first to prevent TOCTOU replay attacks
+      const cachedSig = await redisClient.get(`ClaimSig:${transactionHash}`);
+      if (cachedSig) return JSON.parse(cachedSig);
 
-      // keccak256(abi.encodePacked(msg.sender, usdcConsumed, dTslaAmount, timestamp, "claimMint"))
-      const messageHash = keccak256(
-        encodePacked(
-          ['address', 'uint256', 'uint256', 'uint256', 'string'],
-          [
-            wallet_address,
-            parseUnits(tx.usdc_amount.toString(), 6), // USDC uses 6 decimals
-            parseEther(tx.dtsla_amount.toString()),
-            BigInt(timestamp),
-            "claimMint"
-          ]
-        )
-      );
+      const lockKey = `Lock:${transactionHash}`;
+      const acquired = await redisClient.setNX(lockKey, "1");
+      if (!acquired) throw new Error("Transaction is currently being processed. Please try again.");
+      await redisClient.expire(lockKey, 10);
 
-      // Sign the raw hash (viem automatically prepends the Ethereum Signed Message prefix)
-      const signature = await oracleAccount.signMessage({ message: { raw: messageHash } });
+      try {
+        // Double check cache inside the lock
+        const doubleCheck = await redisClient.get(`ClaimSig:${transactionHash}`);
+        if (doubleCheck) return JSON.parse(doubleCheck);
 
-      return {
-        usdcAmount: tx.usdc_amount,
-        dTslaAmount: tx.dtsla_amount,
-        timestamp,
-        signature
-      };
+        // 5. Generate Signature
+        const timestamp = Math.floor(Date.now() / 1000);
+
+        // keccak256(abi.encodePacked(msg.sender, usdcConsumed, dTslaAmount, timestamp, "claimMint"))
+        const messageHash = keccak256(
+          encodePacked(
+            ['address', 'uint256', 'uint256', 'uint256', 'string'],
+            [
+              wallet_address,
+              parseUnits(tx.usdc_amount.toString(), 6), // USDC uses 6 decimals
+              parseEther(tx.dtsla_amount.toString()),
+              BigInt(timestamp),
+              "claimMint"
+            ]
+          )
+        );
+
+        const signature = await oracleAccount.signMessage({ message: { raw: messageHash } });
+
+        const result = {
+          usdcAmount: tx.usdc_amount,
+          dTslaAmount: tx.dtsla_amount,
+          timestamp,
+          signature
+        };
+
+        await redisClient.setEx(`ClaimSig:${transactionHash}`, 86400, JSON.stringify(result));
+        return result;
+      } finally {
+        await redisClient.del(lockKey);
+      }
     },
     getClaimUSDCSignature: async (_, { transactionHash }, context) => {
       if (!context.user) throw new Error("UNAUTHENTICATED");
@@ -107,32 +126,50 @@ const resolvers = {
         throw new Error("User does not have a connected wallet address");
       }
 
-      // 4. Generate Signature
-      const timestamp = Math.floor(Date.now() / 1000);
+      // 4. Check cache first to prevent TOCTOU replay attacks
+      const cachedSig = await redisClient.get(`ClaimUSDCSig:${transactionHash}`);
+      if (cachedSig) return JSON.parse(cachedSig);
 
-      // keccak256(abi.encodePacked(msg.sender, dTslaAmount, usdcAmount, timestamp, "redeem"))
-      const messageHash = keccak256(
-        encodePacked(
-          ['address', 'uint256', 'uint256', 'uint256', 'string'],
-          [
-            wallet_address,
-            parseEther(tx.dtsla_amount.toString()),
-            parseUnits(tx.usdc_amount.toString(), 6), // USDC uses 6 decimals
-            BigInt(timestamp),
-            "redeem"
-          ]
-        )
-      );
+      const lockKey = `Lock:${transactionHash}`;
+      const acquired = await redisClient.setNX(lockKey, "1");
+      if (!acquired) throw new Error("Transaction is currently being processed. Please try again.");
+      await redisClient.expire(lockKey, 10);
 
-      // Sign the raw hash (viem automatically prepends the Ethereum Signed Message prefix)
-      const signature = await oracleAccount.signMessage({ message: { raw: messageHash } });
+      try {
+        const doubleCheck = await redisClient.get(`ClaimUSDCSig:${transactionHash}`);
+        if (doubleCheck) return JSON.parse(doubleCheck);
 
-      return {
-        usdcAmount: tx.usdc_amount,
-        dTslaAmount: tx.dtsla_amount,
-        timestamp,
-        signature
-      };
+        // 5. Generate Signature
+        const timestamp = Math.floor(Date.now() / 1000);
+
+        // keccak256(abi.encodePacked(msg.sender, dTslaAmount, usdcAmount, timestamp, "redeem"))
+        const messageHash = keccak256(
+          encodePacked(
+            ['address', 'uint256', 'uint256', 'uint256', 'string'],
+            [
+              wallet_address,
+              parseEther(tx.dtsla_amount.toString()),
+              parseUnits(tx.usdc_amount.toString(), 6), // USDC uses 6 decimals
+              BigInt(timestamp),
+              "redeem"
+            ]
+          )
+        );
+
+        const signature = await oracleAccount.signMessage({ message: { raw: messageHash } });
+
+        const result = {
+          usdcAmount: tx.usdc_amount,
+          dTslaAmount: tx.dtsla_amount,
+          timestamp,
+          signature
+        };
+
+        await redisClient.setEx(`ClaimUSDCSig:${transactionHash}`, 86400, JSON.stringify(result));
+        return result;
+      } finally {
+        await redisClient.del(lockKey);
+      }
     },
     getRefundSignature: async (_, { transactionHash }, context) => {
       if (!context.user) throw new Error("UNAUTHENTICATED");
@@ -144,65 +181,86 @@ const resolvers = {
 
       const tx = txRes.rows[0];
 
-      // 2. Ensure it's FAILED or CANCELED_BY_ADMIN (meaning Alpaca rejected it)
-      if (tx.status !== 'FAILED' && tx.status !== 'CANCELED_BY_ADMIN') {
+      // 2. Ensure it's FAILED, CANCELED_BY_ADMIN, or CANCELED_BY_USER
+      if (tx.status !== 'FAILED' && tx.status !== 'CANCELED_BY_ADMIN' && tx.status !== 'CANCELED_BY_USER') {
         throw new Error(`Transaction is not FAILED or CANCELED. Cannot refund. Current status: ${tx.status}`);
       }
 
-      // 3. Fetch the user's wallet address
-      const userRes = await pool.query('SELECT wallet_address FROM users WHERE id = $1', [tx.user_id]);
-      if (userRes.rows.length === 0) {
-        throw new Error("User not found for this transaction");
+      // 2.5. Check cache to prevent TOCTOU replay attacks
+      const cachedSig = await redisClient.get(`RefundSig:${transactionHash}`);
+      if (cachedSig) return JSON.parse(cachedSig);
+
+      const lockKey = `Lock:${transactionHash}`;
+      const acquired = await redisClient.setNX(lockKey, "1");
+      if (!acquired) throw new Error("Transaction is currently being processed. Please try again.");
+      await redisClient.expire(lockKey, 10);
+
+      try {
+        const doubleCheck = await redisClient.get(`RefundSig:${transactionHash}`);
+        if (doubleCheck) return JSON.parse(doubleCheck);
+
+        // 3. Fetch the user's wallet address
+        const userRes = await pool.query('SELECT wallet_address FROM users WHERE id = $1', [tx.user_id]);
+        if (userRes.rows.length === 0) {
+          throw new Error("User not found for this transaction");
+        }
+        const wallet_address = userRes.rows[0].wallet_address;
+
+        if (!wallet_address) {
+          throw new Error("User does not have a connected wallet address");
+        }
+
+        // 4. Generate Signature based on Type
+        const timestamp = Math.floor(Date.now() / 1000);
+        let messageHash;
+
+        if (tx.type === 'MINT') {
+          // keccak256(abi.encodePacked(msg.sender, usdcAmount, timestamp, "cancelMint"))
+          messageHash = keccak256(
+            encodePacked(
+              ['address', 'uint256', 'uint256', 'string'],
+              [
+                wallet_address,
+                parseUnits(tx.usdc_amount.toString(), 6), // USDC uses 6 decimals
+                BigInt(timestamp),
+                "cancelMint"
+              ]
+            )
+          );
+        } else if (tx.type === 'REDEEM') {
+          // keccak256(abi.encodePacked(msg.sender, dTslaAmount, timestamp, "cancelRedeem"))
+          messageHash = keccak256(
+            encodePacked(
+              ['address', 'uint256', 'uint256', 'string'],
+              [
+                wallet_address,
+                parseEther(tx.dtsla_amount.toString()),
+                BigInt(timestamp),
+                "cancelRedeem"
+              ]
+            )
+          );
+        } else {
+          throw new Error("Unknown transaction type");
+        }
+
+        // Sign the raw hash
+        const signature = await oracleAccount.signMessage({ message: { raw: messageHash } });
+
+        const result = {
+          usdcAmount: tx.usdc_amount,
+          dTslaAmount: tx.dtsla_amount,
+          timestamp,
+          signature
+        };
+
+        // Cache it for 24 hours
+        await redisClient.setEx(`RefundSig:${transactionHash}`, 86400, JSON.stringify(result));
+
+        return result;
+      } finally {
+        await redisClient.del(lockKey);
       }
-      const wallet_address = userRes.rows[0].wallet_address;
-
-      if (!wallet_address) {
-        throw new Error("User does not have a connected wallet address");
-      }
-
-      // 4. Generate Signature based on Type
-      const timestamp = Math.floor(Date.now() / 1000);
-      let messageHash;
-
-      if (tx.type === 'MINT') {
-        // keccak256(abi.encodePacked(msg.sender, usdcAmount, timestamp, "cancelMint"))
-        messageHash = keccak256(
-          encodePacked(
-            ['address', 'uint256', 'uint256', 'string'],
-            [
-              wallet_address,
-              parseUnits(tx.usdc_amount.toString(), 6), // USDC uses 6 decimals
-              BigInt(timestamp),
-              "cancelMint"
-            ]
-          )
-        );
-      } else if (tx.type === 'REDEEM') {
-        // keccak256(abi.encodePacked(msg.sender, dTslaAmount, timestamp, "cancelRedeem"))
-        messageHash = keccak256(
-          encodePacked(
-            ['address', 'uint256', 'uint256', 'string'],
-            [
-              wallet_address,
-              parseEther(tx.dtsla_amount.toString()),
-              BigInt(timestamp),
-              "cancelRedeem"
-            ]
-          )
-        );
-      } else {
-        throw new Error("Unknown transaction type");
-      }
-
-      // Sign the raw hash
-      const signature = await oracleAccount.signMessage({ message: { raw: messageHash } });
-
-      return {
-        usdcAmount: tx.usdc_amount,
-        dTslaAmount: tx.dtsla_amount,
-        timestamp,
-        signature
-      };
     },
     getUserTransactions: async (_, __, context) => {
       if (!context.user) throw new Error("UNAUTHENTICATED");
@@ -278,7 +336,7 @@ const resolvers = {
 
       // 2. Atomically reserve the fiat first (Solves the Race Condition!)
       const newReservedFiat = await redisClient.incrByFloat('alpaca:reserved_buying_power', usdcAmount);
-      
+
       const unreservedFiat = availableFiat - newReservedFiat;
       if (unreservedFiat < 0) {
         // Rollback the reservation since it exceeds buying power
@@ -427,6 +485,125 @@ const resolvers = {
 
       console.log(`✅ Updated User Whitelist: ${wallet_address} -> ${is_whitelisted}`);
       return rows[0];
+    },
+    cancelPendingTransaction: async (_, { transactionHash }, context) => {
+      if (!context.user) throw new Error("UNAUTHENTICATED");
+      const { alpaca } = require('./alpaca');
+
+      // 1. Fetch transaction
+      const txRes = await pool.query('SELECT * FROM transactions WHERE blockchain_tx = $1', [transactionHash]);
+      if (txRes.rows.length === 0) {
+        throw new Error("Transaction not found");
+      }
+      const tx = txRes.rows[0];
+
+      // 2. Authorize: Make sure this user owns the transaction
+      const userRes = await pool.query('SELECT privy_id FROM users WHERE id = $1', [tx.user_id]);
+      if (userRes.rows.length === 0 || userRes.rows[0].privy_id !== context.user.privyUserId) {
+        throw new Error("UNAUTHORIZED: You do not own this transaction");
+      }
+
+      // 3. Ensure it's PENDING
+      if (tx.status !== 'PENDING_ALPACA') {
+        throw new Error(`Cannot cancel transaction. Status is currently: ${tx.status}`);
+      }
+
+      // 4. Check with Alpaca if it can be canceled
+      // Since we map clientOrderId to blockchain_tx
+      try {
+        const order = await alpaca.trading.orders.getOrderByClientOrderId({ clientOrderId: transactionHash });
+
+        // Orders that are fully filled cannot be canceled
+        if (order.status === 'filled') {
+          // If Alpaca filled it but our indexer hasn't updated the DB yet, we update it now
+          await pool.query("UPDATE transactions SET status = 'READY_TO_CLAIM' WHERE blockchain_tx = $1", [transactionHash]);
+          throw new Error("Order is already completely filled on Alpaca. You must claim your assets.");
+        }
+
+        if (order.status === 'accepted' || order.status === 'new') {
+          // Send the DELETE request to Alpaca
+          await alpaca.trading.orders.deleteOrderByOrderID({ orderId: order.id });
+          console.log(`❌ Canceled Alpaca order for tx: ${transactionHash}`);
+        } else {
+          throw new Error(`Order cannot be canceled right now. Current Alpaca status: ${order.status}`);
+        }
+      } catch (err) {
+        // If Alpaca API throws an error, it might mean the order doesn't exist yet, or was already canceled.
+        // We log it and assume we can safely cancel if we can't find it
+        console.warn("Alpaca cancel warning:", err.message);
+      }
+
+      // 5. Update Database to CANCELED_BY_USER
+      await pool.query(
+        "UPDATE transactions SET status = 'CANCELED_BY_USER' WHERE blockchain_tx = $1",
+        [transactionHash]
+      );
+
+      // Publish event via Redis
+      const payload = JSON.stringify({
+        walletAddress: tx.wallet_address,
+        status: 'CANCELED_BY_USER',
+        blockchain_tx: transactionHash
+      });
+      await redisClient.publish('transaction_updates', payload);
+
+      // 6. Generate Signature so they can refund on-chain immediately
+      // 6.1. Check cache first to prevent TOCTOU replay attacks
+      const cachedSig = await redisClient.get(`RefundSig:${transactionHash}`);
+      if (cachedSig) return JSON.parse(cachedSig);
+
+      const lockKey = `Lock:${transactionHash}`;
+      const acquired = await redisClient.setNX(lockKey, "1");
+      if (!acquired) throw new Error("Transaction is currently being processed. Please try again.");
+      await redisClient.expire(lockKey, 10);
+
+      try {
+        const doubleCheck = await redisClient.get(`RefundSig:${transactionHash}`);
+        if (doubleCheck) return JSON.parse(doubleCheck);
+
+        const timestamp = Math.floor(Date.now() / 1000);
+        let messageHash;
+
+        if (tx.type === 'MINT') {
+          messageHash = keccak256(
+            encodePacked(
+              ['address', 'uint256', 'uint256', 'string'],
+              [
+                tx.wallet_address,
+                parseUnits(tx.usdc_amount.toString(), 6),
+                BigInt(timestamp),
+                "cancelMint"
+              ]
+            )
+          );
+        } else if (tx.type === 'REDEEM') {
+          messageHash = keccak256(
+            encodePacked(
+              ['address', 'uint256', 'uint256', 'string'],
+              [
+                tx.wallet_address,
+                parseEther(tx.dtsla_amount.toString()),
+                BigInt(timestamp),
+                "cancelRedeem"
+              ]
+            )
+          );
+        }
+
+        const signature = await oracleAccount.signMessage({ message: { raw: messageHash } });
+
+        const result = {
+          usdcAmount: tx.usdc_amount,
+          dTslaAmount: tx.dtsla_amount,
+          timestamp,
+          signature
+        };
+
+        await redisClient.setEx(`RefundSig:${transactionHash}`, 86400, JSON.stringify(result));
+        return result;
+      } finally {
+        await redisClient.del(lockKey);
+      }
     }
   }
 };

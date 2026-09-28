@@ -78,10 +78,11 @@ async function handleDeposit(log) {
     await redisClient.incrByFloat('alpaca:reserved_buying_power', -fiatAmount);
 
     // 5. Execute Trade on Alpaca
+    const roundedNotional = parseFloat(fiatAmount.toFixed(2));
     await alpaca.trading.orders.market({
       symbol: 'TSLA',
       side: 'buy',
-      notional: fiatAmount, // Fractional share buying via fiat amount
+      notional: roundedNotional, // Fractional share buying via fiat amount, must be 2 decimal places
       clientOrderId: transactionHash // Links Web3 tx hash to Web2 Alpaca Order!
     });
     console.log(`✅ Alpaca Market Buy Placed for $${fiatAmount} TSLA (Order ID: ${transactionHash})`);
@@ -186,10 +187,11 @@ async function handleRedeemRequested(log) {
     );
 
     // 3. Execute Trade on Alpaca (Sell the shares)
+    const roundedShares = parseFloat(shares.toFixed(9));
     await alpaca.trading.orders.market({
       symbol: 'TSLA',
       side: 'sell',
-      qty: shares,
+      qty: roundedShares,
       clientOrderId: transactionHash
     });
     console.log(`✅ Alpaca Market Sell Placed for ${shares} TSLA (Order ID: ${transactionHash})`);
@@ -273,9 +275,9 @@ async function handleMintCanceled(log) {
     if (userRes.rows.length === 0) return;
     const user_id = userRes.rows[0].id;
 
-    // We look for FAILED or CANCELED_BY_ADMIN because it was marked when Alpaca rejected/canceled it.
+    // We look for FAILED, CANCELED_BY_ADMIN, or CANCELED_BY_USER because it was marked when Alpaca rejected/canceled it.
     const pendingTx = await pool.query(
-      `SELECT * FROM transactions WHERE user_id = $1 AND type = 'MINT' AND (status = 'FAILED' OR status = 'CANCELED_BY_ADMIN') ORDER BY created_at ASC LIMIT 1`,
+      `SELECT * FROM transactions WHERE user_id = $1 AND type = 'MINT' AND (status = 'FAILED' OR status = 'CANCELED_BY_ADMIN' OR status = 'CANCELED_BY_USER') ORDER BY created_at ASC LIMIT 1`,
       [user_id]
     );
 
@@ -305,7 +307,7 @@ async function handleRedeemCanceled(log) {
     const user_id = userRes.rows[0].id;
 
     const pendingTx = await pool.query(
-      `SELECT * FROM transactions WHERE user_id = $1 AND type = 'REDEEM' AND (status = 'FAILED' OR status = 'CANCELED_BY_ADMIN') ORDER BY created_at ASC LIMIT 1`,
+      `SELECT * FROM transactions WHERE user_id = $1 AND type = 'REDEEM' AND (status = 'FAILED' OR status = 'CANCELED_BY_ADMIN' OR status = 'CANCELED_BY_USER') ORDER BY created_at ASC LIMIT 1`,
       [user_id]
     );
 

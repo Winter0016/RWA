@@ -61,8 +61,8 @@ export default function Home() {
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    // Allow empty, integers, and up to 6 decimal places
-    if (val === '' || /^\d*\.?\d{0,6}$/.test(val)) {
+    // Allow empty, integers, and up to 2 decimal places (Alpaca USD limit)
+    if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
       setDepositAmount(val);
     }
   };

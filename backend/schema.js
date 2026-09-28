@@ -28,6 +28,7 @@ const typeDefs = `#graphql
     FAILED
     REFUNDED
     CANCELED_BY_ADMIN
+    CANCELED_BY_USER
   }
 
   type Transaction {
@@ -116,6 +117,9 @@ const typeDefs = `#graphql
       wallet_address: String!
       is_whitelisted: Boolean!
     ): User
+
+    # User actively cancels a pending order (e.g. before Alpaca fills it)
+    cancelPendingTransaction(transactionHash: String!): Quote
   }
 `;
 

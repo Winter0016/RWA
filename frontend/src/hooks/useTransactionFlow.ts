@@ -7,7 +7,7 @@ import { io, Socket } from 'socket.io-client';
 import { encodeFunctionData, parseUnits } from 'viem';
 import { useGaslessTx } from './useGaslessTx';
 import { DTSLA_ADDRESS, DTSLA_ABI } from '../constants/contracts';
-import { RESERVE_MINT_POWER, GET_CLAIM_SIGNATURE, GET_CLAIM_USDC_SIGNATURE, GET_REFUND_SIGNATURE } from '../graphql/mutations';
+import { RESERVE_MINT_POWER, GET_CLAIM_SIGNATURE, GET_CLAIM_USDC_SIGNATURE, GET_REFUND_SIGNATURE, CANCEL_PENDING_TRANSACTION } from '../graphql/mutations';
 
 export type TxState =
   | 'IDLE'
@@ -84,7 +84,7 @@ export function useTransactionFlow() {
       const { data } = await apolloClient.mutate({
         mutation: RESERVE_MINT_POWER,
         variables: {
-          usdcAmount: usdcAmount,
+          usdcAmount: parseFloat(usdcAmount),
           walletAddress: smartAccount.address // The Smart Account is msg.sender!
         }
       });
@@ -126,6 +126,8 @@ export function useTransactionFlow() {
       // We now rely on the centralized useEffect listener to catch the event
       // whenever it arrives, ensuring we don't drop concurrent events!
     } catch (error: any) {
+      console.error("Mint initiation failed:", error);
+      alert(`Transaction failed: ${error.message || "Protocol might be paused."}`);
       setState('IDLE');
     }
   };
@@ -164,6 +166,7 @@ export function useTransactionFlow() {
       setState('SUCCESS');
     } catch (err: any) {
       console.error("Failed to resume claim:", err);
+      alert(`Transaction failed: ${err.message || "Protocol might be paused."}`);
       setState('IDLE');
     }
   };
@@ -196,6 +199,7 @@ export function useTransactionFlow() {
       // whenever it arrives, ensuring we don't drop concurrent events!
     } catch (error: any) {
       console.error("Failed to initiate redeem:", error);
+      alert(`Transaction failed: ${error.message || "Protocol might be paused."}`);
       setState('IDLE');
     }
   };
@@ -231,6 +235,7 @@ export function useTransactionFlow() {
       setState('SUCCESS');
     } catch (err: any) {
       console.error("Failed to resume redeem:", err);
+      alert(`Transaction failed: ${err.message || "Protocol might be paused."}`);
       setState('IDLE');
     }
   };
@@ -275,9 +280,56 @@ export function useTransactionFlow() {
       setState('SUCCESS');
     } catch (err: any) {
       console.error("Failed to resume refund:", err);
+      alert(`Transaction failed: ${err.message || "Protocol might be paused."}`);
       setState('IDLE');
     }
   };
 
-  return { state, setState, initiateMint, resumeClaim, initiateRedeem, resumeRedeem, resumeRefund, txType };
+  const cancelPendingTx = async (transactionHash: string) => {
+    setTxType('REFUND');
+    setState('AWAITING_CLAIM_TX'); // Similar to refund state
+    try {
+      if (!smartAccount) throw new Error("Smart Account not initialized");
+
+      const cancelRes = await apolloClient.mutate({
+        mutation: CANCEL_PENDING_TRANSACTION,
+        variables: {
+          transactionHash: transactionHash
+        }
+      });
+
+      const refundData = (cancelRes.data as any).cancelPendingTransaction;
+      const usdcAmountWei = parseUnits(Number(refundData.usdcAmount).toFixed(6), 6);
+      const dTslaAmountWei = parseUnits(Number(refundData.dTslaAmount).toFixed(18), 18);
+
+      let refundCallData;
+      if (dTslaAmountWei > BigInt(0)) {
+        refundCallData = encodeFunctionData({
+          abi: DTSLA_ABI,
+          functionName: 'cancelRedeem',
+          args: [dTslaAmountWei, BigInt(refundData.timestamp), refundData.signature as `0x${string}`]
+        });
+      } else {
+        refundCallData = encodeFunctionData({
+          abi: DTSLA_ABI,
+          functionName: 'cancelMint',
+          args: [usdcAmountWei, BigInt(refundData.timestamp), refundData.signature as `0x${string}`]
+        });
+      }
+
+      await sendGaslessTransaction(
+        [DTSLA_ADDRESS],
+        [0],
+        [refundCallData]
+      );
+
+      setState('SUCCESS');
+    } catch (err: any) {
+      console.error("Failed to cancel transaction:", err);
+      alert(`Failed to cancel transaction: ${err.message}`);
+      setState('IDLE');
+    }
+  };
+
+  return { state, setState, initiateMint, resumeClaim, initiateRedeem, resumeRedeem, resumeRefund, cancelPendingTx, txType };
 }

@@ -12,6 +12,7 @@
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^4.0.2",
     "@apollo/server": "^4.13.0",
+    "@openzeppelin/merkle-tree": "^1.0.8",
     "@privy-io/server-auth": "^1.32.5",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",

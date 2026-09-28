@@ -21,7 +21,7 @@ const truncateDecimals = (val: number | string, decimals: number = 6) => {
 
 export default function TransactionsPage() {
   const { ready, authenticated, user, login } = usePrivy();
-  const { state: txState, setState: setTxState, resumeClaim, resumeRedeem, resumeRefund, txType } = useTransactionFlow();
+  const { state: txState, setState: setTxState, resumeClaim, resumeRedeem, resumeRefund, cancelPendingTx, txType } = useTransactionFlow();
 
   // Fetch transactions for the user securely via backend context
   const { data, loading, error, refetch } = useQuery<any>(GET_USER_TRANSACTIONS, {
@@ -162,21 +162,29 @@ export default function TransactionsPage() {
                             >
                               CLAIM USDC
                             </button>
-                          ) : (tx.status === 'FAILED' || tx.status === 'CANCELED_BY_ADMIN') ? (
+                          ) : (tx.status === 'FAILED' || tx.status === 'CANCELED_BY_ADMIN' || tx.status === 'CANCELED_BY_USER') ? (
                             <button
                               onClick={() => resumeRefund(tx.blockchain_tx)}
                               className="px-3 py-1.5 text-xs font-bold rounded-md bg-red-600 hover:bg-red-500 text-white transition-colors shadow-[0_0_10px_rgba(220,38,38,0.4)]"
                             >
-                              REFUND FAILED TX
+                              REFUND CANCELED TX
                             </button>
                           ) : tx.status === 'REFUNDED' ? (
                             <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-500/10 text-slate-400 border border-slate-500/20">
                               Refunded
                             </span>
                           ) : (
-                            <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                              Pending Alpaca Settlement
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                                Pending Alpaca
+                              </span>
+                              <button
+                                onClick={() => cancelPendingTx(tx.blockchain_tx)}
+                                className="px-3 py-1.5 text-xs font-bold rounded-md bg-[#1E293B] hover:bg-red-600/80 text-slate-300 hover:text-white transition-colors border border-[#334155] hover:border-red-500"
+                              >
+                                CANCEL
+                              </button>
+                            </div>
                           )}
                         </td>
 
