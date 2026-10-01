@@ -250,7 +250,7 @@ const resolvers = {
           signature
         };
 
-        // Cache it for 24 hours
+        // Cache it for 4 minutes and 40 secs
         await redisClient.setEx(`RefundSig:${transactionHash}`, 280, JSON.stringify(result));
 
         return result;

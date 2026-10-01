@@ -6,7 +6,7 @@ Traditional finance requires users to navigate complex brokerage accounts, under
 ## 💡 The Solution
 A Real World Asset (RWA) platform that allows users to seamlessly purchase `dTesla` tokens. Each `dTesla` token is 1:1 backed by real Tesla stock held in a traditional brokerage account (managed via the Alpaca API).
 
-Users pay for the asset using the official Circle Testnet USDC token. The entire process uses Account Abstraction (ERC-20 Paymaster) to allow users to pay for their gas fees directly in USDC, providing a Web2-like checkout experience with the benefits of Web3 composability. 
+Users pay for the asset using the official Circle Testnet USDC token. The entire process uses Account Abstraction (ERC-4337) to allow users to pay for their gas fees directly in USDC, providing a Web2-like checkout experience with the benefits of Web3 composability. 
 
 ## 🏗️ The Tech Stack (PERN-G + Web3)
 
@@ -15,17 +15,19 @@ Users pay for the asset using the official Circle Testnet USDC token. The entire
 - **Privy:** Users log in with their email. A Smart Account (ERC-4337) is automatically generated for them in the background. No MetaMask required.
 - **Paymaster (ERC-20 Gas):** When a user buys dTesla, they pay the network gas fee using their testnet USDC. The Pimlico Paymaster handles the conversion to ETH under the hood. The user never needs native tokens.
 
-### 2. Backend (Node.js + PostgreSQL + GraphQL)
-- **Node.js (Express):** Acts as the fast Web2 layer. It listens to blockchain events to index data, and acts as the "Treasury" that transfers official Testnet USDC to users when they use the Mock Stripe Checkout.
-- **PostgreSQL (Indexer):** Acts as an indexer, caching user balances, pending transactions, and whitelist statuses.
-- **GraphQL (Apollo):** Serves the indexed user data and token supply metrics incredibly fast to the React frontend. Fully secured by Privy JWTs.
+### 2. Backend (Node.js + PostgreSQL + GraphQL + Redis)
+- **Node.js (Express):** Acts as the fast Web2 layer. It runs an `indexer.js` to index blockchain events, and acts as the "Oracle" that verifies real-world API data and signs cryptographic messages.
+- **PostgreSQL:** Acts as the source of truth, caching user balances, pending transactions, and whitelist statuses.
+- **GraphQL (Apollo):** Serves the indexed user data and token supply metrics incredibly fast to the React frontend. Protected by a **Zero-Trust Architecture** using Privy JWTs.
+- **Redis:** Provides high-speed caching for generated cryptographic signatures and enforces **Distributed Mutex Locks** to prevent race condition attacks.
 
 ### 3. Frontend (Next.js)
 - **Admin Dashboard:** A private page for the platform administrator to view the total `dTesla` supply, all user balances, and manage protocol/user whitelists.
-- **User Page:** A seamless storefront where users can input how much `dTesla` they want to buy. Utilizes a Two-Step Escrow architecture to guarantee 1:1 backing.
+- **User Page:** A seamless storefront where users can input how much `dTesla` they want to buy. Utilizes a Two-Step Escrow architecture to guarantee 1:1 backing, featuring dynamic transaction states (e.g., `PENDING_ALPACA`, `CANCELED_BY_SYSTEM`) and an intuitive refund UX.
 
 ### 4. Smart Contracts (Solidity on Arbitrum Sepolia)
 - `dTSLA.sol`: A UUPS Upgradeable ERC20 token contract. Employs a Two-Step Escrow architecture:
   1. User deposits USDC into the Vault.
   2. The Node.js backend hears the event, executes the trade on Alpaca, and signs an EIP-712 payload.
   3. User submits the signature to the blockchain to mint their dTSLA, completely eliminating counterparty execution risk.
+  4. **Strict Security:** Includes mapping-based signature replay protection (`s_usedSignatures`) and strict timestamp expiration checks.

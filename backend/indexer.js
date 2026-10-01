@@ -633,6 +633,8 @@ function watchEvents() {
     address: dTSLA_ADDRESS,
     abi: [depositReceivedEvent, mintedEvent, redeemRequestedEvent, redeemedEvent, mintCanceledEvent, redeemCanceledEvent],
     onLogs: async (logs) => {
+      if (logs.length === 0) return;
+
       for (const log of logs) {
         if (log.eventName === 'DepositReceived') {
           await handleDeposit(log);
@@ -647,9 +649,12 @@ function watchEvents() {
         } else if (log.eventName === 'RedeemCanceled') {
           await handleRedeemCanceled(log);
         }
-
-        await pool.query('UPDATE indexer_state SET last_processed_block = $1 WHERE id = 1', [log.blockNumber.toString()]);
       }
+
+      // ⚡ BATCH OPTIMIZATION: Only update the database ONCE at the very end of the batch
+      // rather than spamming the database for every individual event.
+      const lastLog = logs[logs.length - 1];
+      await pool.query('UPDATE indexer_state SET last_processed_block = $1 WHERE id = 1', [lastLog.blockNumber.toString()]);
     }
   });
 }

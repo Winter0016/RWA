@@ -147,9 +147,7 @@ export default function Portfolio() {
                       <td className="px-6 py-4 font-mono text-white">${usdValue}</td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
-                          <button className="px-4 py-2 bg-[#1E293B] hover:bg-[#334155] text-white text-sm font-medium rounded-lg transition-colors">
-                            Trade
-                          </button>
+
                           <button 
                             onClick={() => setIsRedeemModalOpen(true)}
                             className="px-4 py-2 border border-[#1E293B] hover:bg-[#1E293B] text-slate-300 hover:text-white text-sm font-medium rounded-lg transition-colors"

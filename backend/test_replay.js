@@ -1,13 +1,12 @@
-const axios = require('axios');
 
 const GRAPHQL_URL = 'http://localhost:4000/graphql';
 
 // Replace with a valid blockchain_tx in your database that is in CANCELED_BY_USER or FAILED status
-const TEST_TX_HASH = '0xfbb3bf6cbc2688515e3b65d9470ff167bda5d963f0c880423052fafbab62f5fa';
+const TEST_TX_HASH = '0xcbc05ccb7b94ea6e63a36cf6eb5aa6c4b0c5f2aa9b7c8d72eb5c6477d997ea83';
 
 // The Privy JWT Token from the frontend (requires a valid user)
 // You can get this from the 'Authorization' header of any GraphQL request in your browser's Network tab.
-const TEST_TOKEN = 'eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IkRpY0ZINDlxdXh4MFcyTE5kTl8tTU1YMElKQ2lOd20zRzQ4dTdLeFU5OEEifQ.eyJzaWQiOiJjbXVsNGp4YzUwMzg5MGNpOW53aGZpNm82IiwiaXNzIjoicHJpdnkuaW8iLCJpYXQiOjE3OTA2MDE0NjIsImF1ZCI6ImNtdTZtYXF1bDAwMmkwY2pwc3FiYzF4eGEiLCJzdWIiOiJkaWQ6cHJpdnk6Y211ODgzM28xMDNmOTBkbDgzN2dtMjc5ZCIsImV4cCI6MTc5MDYwNTA2Mn0.HlsB9jn-NP40jzt9XqnE_1cS1T5vviN7O3UcSBtQ4ZUyjUTPN6wvaunWHrzu0KjFjY9Ozqx4v_llC9FGqiU8tA';
+const TEST_TOKEN = 'eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IkRpY0ZINDlxdXh4MFcyTE5kTl8tTU1YMElKQ2lOd20zRzQ4dTdLeFU5OEEifQ.eyJzaWQiOiJjbXVtaWszODIwM24zMGNrdzltaGNreXd4IiwiaXNzIjoicHJpdnkuaW8iLCJpYXQiOjE3OTA2NzY1MDYsImF1ZCI6ImNtdTZtYXF1bDAwMmkwY2pwc3FiYzF4eGEiLCJzdWIiOiJkaWQ6cHJpdnk6Y211ODgzM28xMDNmOTBkbDgzN2dtMjc5ZCIsImV4cCI6MTc5MDY4MDEwNn0.bJKRkwI3nAZuQm9QfPw-zT5jEA484YHl0-0YyMUKzZj-iCvtG5K_jiESgHpSGBw9hyYrygezN5UOZ6uEVWadPw';
 
 async function testReplayAttack() {
   const query = `
@@ -25,11 +24,14 @@ async function testReplayAttack() {
   const promises = [];
   for (let i = 0; i < 5; i++) {
     promises.push(
-      axios.post(GRAPHQL_URL, { query, variables }, {
+      fetch(GRAPHQL_URL, {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${TEST_TOKEN}`
-        }
-      }).catch(err => err.response?.data || err.message)
+        },
+        body: JSON.stringify({ query, variables })
+      }).then(res => res.json()).catch(err => ({ error: err.message }))
     );
   }
 

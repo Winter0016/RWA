@@ -168,12 +168,17 @@ export default function TransactionsPage() {
                               CLAIM USDC
                             </button>
                           ) : (tx.status === 'FAILED' || tx.status === 'CANCELED_BY_ADMIN' || tx.status === 'CANCELED_BY_USER') ? (
-                            <button
-                              onClick={() => resumeRefund(tx.blockchain_tx)}
-                              className="px-3 py-1.5 text-xs font-bold rounded-md bg-red-600 hover:bg-red-500 text-white transition-colors shadow-[0_0_10px_rgba(220,38,38,0.4)]"
-                            >
-                              REFUND CANCELED TX
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${tx.status === 'FAILED' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'}`}>
+                                {tx.status === 'FAILED' ? 'Failed' : tx.status === 'CANCELED_BY_USER' ? 'Canceled by You' : 'Canceled by System'}
+                              </span>
+                              <button
+                                onClick={() => resumeRefund(tx.blockchain_tx)}
+                                className="px-3 py-1.5 text-xs font-bold rounded-md bg-red-600 hover:bg-red-500 text-white transition-colors shadow-[0_0_10px_rgba(220,38,38,0.4)]"
+                              >
+                                REFUND
+                              </button>
+                            </div>
                           ) : tx.status === 'REFUNDED' ? (
                             <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-500/10 text-slate-400 border border-slate-500/20">
                               Refunded

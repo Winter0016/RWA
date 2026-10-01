@@ -2,7 +2,7 @@ import { parseAbi } from 'viem';
 
 import dTSLA_JSON from './dTSLA_ABI.json';
 
-export const DTSLA_ADDRESS = '0xd0AE4d1f4B03fcF186091090ba0b2688f9644C94';
+export const DTSLA_ADDRESS = '0x1d4706e883278417825232846f1e9C106003aea9';
 export const USDC_ADDRESS = '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d';
 
 export const DTSLA_ABI = dTSLA_JSON.abi;

@@ -71,7 +71,7 @@ export function useGaslessTx() {
 
   const sendGaslessTransaction = async (targets: string[], values: (number | bigint | string)[], callDatas: Hex[]) => {
     if (!smartAccount) {
-      alert("Smart Account not initialized yet!");
+      alert("Please wait a moment while we securely connect your wallet.");
       return;
     }
 
@@ -127,7 +127,7 @@ export function useGaslessTx() {
       });
 
       console.log("UserOp Hash:", userOpHash);
-      alert(`Success! Transaction Sent to Pimlico (Gas Paid in USDC!).\n\nUserOpHash: ${userOpHash}\n\nCheck the console and Pimlico Dashboard!`);
+      alert(`Success! Your transaction has been securely submitted to the blockchain. (Gas covered in USDC)`);
 
     } catch (error: any) {
       console.error("Error sending transaction:", error);
