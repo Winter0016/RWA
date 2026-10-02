@@ -31,9 +31,9 @@ The protocol operates using a distributed backend architecture (splitting the Gr
         │
         │ 1. reserveMint(USDC)
         ▼
- +---------------+
- |    Backend    | (Checks Alpaca Funds)
- +---------------+
+ +-------------------+
+ | Backend 1 (index) | (Checks Alpaca Funds)
+ +-------------------+
         │
         │ 2. Returns Signature
         ▼
@@ -49,9 +49,9 @@ The protocol operates using a distributed backend architecture (splitting the Gr
         │
         │ 4. Emits DepositReceived Event
         ▼
- +----------------+         5. Save Tx to DB         +--------------+
- |   indexer.js   | ───────────────────────────────▶ |  PostgreSQL  |
- +----------------+                                  +--------------+
+ +-------------------+       5. Save Tx to DB         +--------------+
+ |Backend 2 (indexer)| ────────────────────────────▶ |  PostgreSQL  |
+ +-------------------+                               +--------------+
         │
         │ 6. Publishes state update (Pub/Sub)
         ▼
@@ -61,22 +61,22 @@ The protocol operates using a distributed backend architecture (splitting the Gr
         │
         │ 7. Forwards state
         ▼
- +----------------+         8. WebSocket Update      +---------------+
- |    index.js    | ───────────────────────────────▶ |  Frontend UI  |
- +----------------+            (Pending Alpaca)      +---------------+
+ +-------------------+       8. WebSocket Update      +---------------+
+ | Backend 1 (index) | ────────────────────────────▶ |  Frontend UI  |
+ +-------------------+          (Pending Alpaca)     +---------------+
 
 ====================================================================
  
- +----------------+         9. Execute Buy Order     +--------------+
- |   indexer.js   | ───────────────────────────────▶ |  Alpaca API  |
- +----------------+                                  +--------------+
+ +-------------------+       9. Execute Buy Order     +--------------+
+ |Backend 2 (indexer)| ────────────────────────────▶ |  Alpaca API  |
+ +-------------------+                               +--------------+
         ▲                                                   │
         │ 10. Order Filled (Webhook/WebSocket)              │
         └───────────────────────────────────────────────────┘
 
- +----------------+         11. Mark READY_TO_CLAIM  +--------------+
- |   indexer.js   | ───────────────────────────────▶ |  PostgreSQL  |
- +----------------+                                  +--------------+
+ +-------------------+       11. Mark READY_TO_CLAIM  +--------------+
+ |Backend 2 (indexer)| ────────────────────────────▶ |  PostgreSQL  |
+ +-------------------+                               +--------------+
         │
         │ 12. Publishes fill event (Pub/Sub)
         ▼
@@ -84,17 +84,17 @@ The protocol operates using a distributed backend architecture (splitting the Gr
  |     Redis      |
  +----------------+
         │
-        │ 11. Forwards state
+        │ 13. Forwards state
         ▼
- +----------------+         12. WebSocket Update     +---------------+
- |    index.js    | ───────────────────────────────▶ |  Frontend UI  |
- +----------------+            (Trade Executed)      +---------------+
+ +-------------------+       14. WebSocket Update     +---------------+
+ | Backend 1 (index) | ────────────────────────────▶ |  Frontend UI  |
+ +-------------------+           (Trade Executed)    +---------------+
 
 ====================================================================
 
- +---------------+          13. Request EIP-712 Sig  +----------------+
- |  Frontend UI  | ───────────────────────────────▶  |    index.js    |
- +---------------+                                   +----------------+
+ +---------------+          13. Request EIP-712 Sig  +-------------------+
+ |  Frontend UI  | ───────────────────────────────▶  | Backend 1 (index) |
+ +---------------+                                   +-------------------+
         ▲                                                   │
         │ 14. Return EIP-712 Signature                      │
         └───────────────────────────────────────────────────┘
@@ -122,9 +122,9 @@ The protocol operates using a distributed backend architecture (splitting the Gr
         │
         │ 2. Emits RedeemRequested Event
         ▼
- +----------------+         3. Save Tx to DB         +--------------+
- |   indexer.js   | ───────────────────────────────▶ |  PostgreSQL  |
- +----------------+                                  +--------------+
+ +-------------------+       3. Save Tx to DB         +--------------+
+ |Backend 2 (indexer)| ────────────────────────────▶ |  PostgreSQL  |
+ +-------------------+                               +--------------+
         │
         │ 4. Publishes state update (Pub/Sub)
         ▼
@@ -134,22 +134,22 @@ The protocol operates using a distributed backend architecture (splitting the Gr
         │
         │ 5. Forwards state
         ▼
- +----------------+         6. WebSocket Update      +---------------+
- |    index.js    | ───────────────────────────────▶ |  Frontend UI  |
- +----------------+            (Pending Alpaca)      +---------------+
+ +-------------------+       6. WebSocket Update      +---------------+
+ | Backend 1 (index) | ────────────────────────────▶ |  Frontend UI  |
+ +-------------------+          (Pending Alpaca)     +---------------+
 
 ====================================================================
  
- +----------------+         7. Execute Sell Order    +--------------+
- |   indexer.js   | ───────────────────────────────▶ |  Alpaca API  |
- +----------------+                                  +--------------+
+ +-------------------+       7. Execute Sell Order    +--------------+
+ |Backend 2 (indexer)| ────────────────────────────▶ |  Alpaca API  |
+ +-------------------+                               +--------------+
         ▲                                                   │
         │ 8. Order Filled (Webhook/WebSocket)               │
         └───────────────────────────────────────────────────┘
 
- +----------------+         9. Mark READY_TO_CLAIM   +--------------+
- |   indexer.js   | ───────────────────────────────▶ |  PostgreSQL  |
- +----------------+                                  +--------------+
+ +-------------------+       9. Mark READY_TO_CLAIM   +--------------+
+ |Backend 2 (indexer)| ────────────────────────────▶ |  PostgreSQL  |
+ +-------------------+                               +--------------+
         │
         │ 10. Publishes fill event (Pub/Sub)
         ▼
@@ -159,9 +159,9 @@ The protocol operates using a distributed backend architecture (splitting the Gr
         │
         │ 11. Forwards state
         ▼
- +----------------+         12. WebSocket Update     +---------------+
- |    index.js    | ───────────────────────────────▶ |  Frontend UI  |
- +----------------+            (Trade Executed)      +---------------+
+ +-------------------+       12. WebSocket Update     +---------------+
+ | Backend 1 (index) | ────────────────────────────▶ |  Frontend UI  |
+ +-------------------+           (Trade Executed)    +---------------+
 
 ====================================================================
 
