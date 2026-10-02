@@ -29,44 +29,56 @@ The protocol operates using a distributed backend architecture (splitting the Gr
  |  Frontend UI  |
  +---------------+
         │
-        │ 1. depositForMint(USDC)
+        │ 1. reserveMint(USDC)
+        ▼
+ +---------------+
+ |    Backend    | (Checks Alpaca Funds)
+ +---------------+
+        │
+        │ 2. Returns Signature
+        ▼
+ +---------------+
+ |  Frontend UI  |
+ +---------------+
+        │
+        │ 3. depositForMint(USDC, Signature)
         ▼
  +----------------+
  | Smart Contract |
  +----------------+
         │
-        │ 2. Emits DepositReceived Event
+        │ 4. Emits DepositReceived Event
         ▼
- +----------------+         3. Save Tx to DB         +--------------+
+ +----------------+         5. Save Tx to DB         +--------------+
  |   indexer.js   | ───────────────────────────────▶ |  PostgreSQL  |
  +----------------+                                  +--------------+
         │
-        │ 4. Publishes state update (Pub/Sub)
+        │ 6. Publishes state update (Pub/Sub)
         ▼
  +----------------+
  |     Redis      |
  +----------------+
         │
-        │ 5. Forwards state
+        │ 7. Forwards state
         ▼
- +----------------+         6. WebSocket Update      +---------------+
+ +----------------+         8. WebSocket Update      +---------------+
  |    index.js    | ───────────────────────────────▶ |  Frontend UI  |
  +----------------+            (Pending Alpaca)      +---------------+
 
 ====================================================================
  
- +----------------+         7. Execute Buy Order     +--------------+
+ +----------------+         9. Execute Buy Order     +--------------+
  |   indexer.js   | ───────────────────────────────▶ |  Alpaca API  |
  +----------------+                                  +--------------+
         ▲                                                   │
-        │ 8. Order Filled (Webhook/WebSocket)               │
+        │ 10. Order Filled (Webhook/WebSocket)              │
         └───────────────────────────────────────────────────┘
 
- +----------------+         9. Mark READY_TO_CLAIM   +--------------+
+ +----------------+         11. Mark READY_TO_CLAIM  +--------------+
  |   indexer.js   | ───────────────────────────────▶ |  PostgreSQL  |
  +----------------+                                  +--------------+
         │
-        │ 10. Publishes fill event (Pub/Sub)
+        │ 12. Publishes fill event (Pub/Sub)
         ▼
  +----------------+
  |     Redis      |

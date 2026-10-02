@@ -5,7 +5,7 @@
 ## 1. The Hook & Introduction (0:00 - 0:45)
 - **What to say:** "Hi, I'm [Your Name]. This is my Real World Asset (RWA) protocol that bridges real US stocks, like Tesla, onto the Arbitrum blockchain."
 - **What to show:** Open the Frontend UI.
-- **The Flex:** Explain that Web3 onboarding is broken. "Users shouldn't need Metamask or ETH to buy stocks." Show yourself logging in with a Google/Email account via Privy. Mention that Pimlico acts as an ERC-4337 Paymaster so the user pays zero gas in ETH (it's abstracted away in USDC).
+- **The Flex:** Explain that Web3 onboarding is broken and users shouldn't need ETH to buy stocks. Then say: *"Users can sign up with a Google account with Privy, or use a MetaMask EOA if they have one. Privy will automatically make an EOA based on their Google account, and then Pimlico will create a Smart Wallet account for the user to interact with the blockchain and store their tokens. Pimlico also acts as the Paymaster so they never pay gas in ETH."*
 
 ## 2. The Architecture (0:45 - 1:30)
 - **What to say:** "Before I show the demo, let me explain how I eliminated Counterparty Risk."
