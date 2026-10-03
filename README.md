@@ -166,7 +166,7 @@ The protocol operates using a distributed backend architecture (splitting the Gr
 ====================================================================
 
  +---------------+          13. Request EIP-712 Sig  +----------------+
- |  Frontend UI  | ───────────────────────────────▶  |    index.js    |
+ |  Frontend UI  | ───────────────────────────────▶  | Backend 1 index |
  +---------------+                                   +----------------+
         ▲                                                   │
         │ 14. Return EIP-712 Signature                      │

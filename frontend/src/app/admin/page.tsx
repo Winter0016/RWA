@@ -7,7 +7,6 @@ import { encodeFunctionData, createPublicClient, http, formatUnits } from 'viem'
 import { arbitrumSepolia } from 'viem/chains';
 import { io } from 'socket.io-client';
 import { GET_ALL_USERS, GET_ALL_TRANSACTIONS, GET_ALL_CONTRACTS } from '@/graphql/queries';
-import { UPSERT_CONTRACT, UPDATE_USER_WHITELIST } from '@/graphql/mutations';
 import { DTSLA_ADDRESS, DTSLA_ABI, USDC_ADDRESS, USDC_ABI } from '@/constants/contracts';
 
 const truncateDecimals = (val: number | string, decimals: number = 6) => {
@@ -33,7 +32,7 @@ export default function AdminPage() {
   const [newContractName, setNewContractName] = useState('');
   const [addingContract, setAddingContract] = useState(false);
 
-  const { data: usersData, loading: usersLoading, error: usersError } = useQuery<any>(GET_ALL_USERS, {
+  const { data: usersData, loading: usersLoading, error: usersError, refetch: refetchUsers } = useQuery<any>(GET_ALL_USERS, {
     fetchPolicy: 'network-only' // Always fetch fresh data for admin
   });
 
@@ -45,8 +44,7 @@ export default function AdminPage() {
     fetchPolicy: 'network-only'
   });
 
-  const [upsertContract] = useMutation(UPSERT_CONTRACT);
-  const [updateUserWhitelist] = useMutation(UPDATE_USER_WHITELIST);
+
 
   // Listen for real-time global transaction updates
   useEffect(() => {
@@ -165,23 +163,12 @@ export default function AdminPage() {
         throw new Error("Transaction reverted on-chain after passing simulation. This is usually due to a gas spike or race condition.");
       }
 
+      // Indexer handles the database update via the WhitelistUpdated event automatically.
+      // We trigger a refetch so the frontend updates without waiting for polling.
       if (isContract) {
-        await upsertContract({
-          variables: {
-            contractAddress: targetAddress,
-            name: name,
-            isWhitelisted: status
-          },
-          refetchQueries: [{ query: GET_ALL_CONTRACTS }]
-        });
+        refetchContracts();
       } else {
-        await updateUserWhitelist({
-          variables: {
-            walletAddress: targetAddress,
-            isWhitelisted: status
-          },
-          refetchQueries: [{ query: GET_ALL_USERS }]
-        });
+        refetchUsers();
       }
 
       alert(`Successfully submitted whitelist transaction!\nTx Hash: ${txHash}`);

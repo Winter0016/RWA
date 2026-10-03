@@ -42,27 +42,7 @@ export const GET_REFUND_SIGNATURE = gql`
   }
 `;
 
-export const UPSERT_CONTRACT = gql`
-  mutation UpsertContract($contractAddress: String!, $name: String!, $isWhitelisted: Boolean!) {
-    upsertContract(contract_address: $contractAddress, name: $name, is_whitelisted: $isWhitelisted) {
-      id
-      contract_address
-      name
-      is_whitelisted
-    }
-  }
-`;
 
-export const UPDATE_USER_WHITELIST = gql`
-  mutation UpdateUserWhitelist($walletAddress: String!, $isWhitelisted: Boolean!) {
-    updateUserWhitelist(wallet_address: $walletAddress, is_whitelisted: $isWhitelisted) {
-      id
-      wallet_address
-      is_whitelisted
-      whitelist_updated_at
-    }
-  }
-`;
 
 export const CANCEL_PENDING_TRANSACTION = gql`
   mutation CancelPendingTransaction($transactionHash: String!) {

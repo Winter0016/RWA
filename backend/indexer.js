@@ -22,6 +22,7 @@ const redeemRequestedEvent = parseAbiItem('event RedeemRequested(address indexed
 const redeemedEvent = parseAbiItem('event Redeemed(address indexed user, uint256 dTslaAmount, uint256 usdcAmount)');
 const mintCanceledEvent = parseAbiItem('event MintCanceled(address indexed user, uint256 usdcAmount)');
 const redeemCanceledEvent = parseAbiItem('event RedeemCanceled(address indexed user, uint256 dTslaAmount)');
+const whitelistUpdatedEvent = parseAbiItem('event WhitelistUpdated(address indexed account, bool status)');
 
 async function initDB() {
   // Create table if it doesn't exist
@@ -326,6 +327,38 @@ async function handleRedeemCanceled(log) {
   }
 }
 
+async function handleWhitelistUpdated(log) {
+  const { account, status } = log.args;
+  console.log(`\n✅ Caught WhitelistUpdated Event: ${account} -> ${status}`);
+  try {
+    // Smart logic: Check if the address exists in the users table first!
+    const userRes = await pool.query('SELECT id FROM users WHERE LOWER(wallet_address) = LOWER($1)', [account]);
+
+    if (userRes.rows.length > 0) {
+      // It's a user! Update the users table.
+      await pool.query(
+        `UPDATE users SET is_whitelisted = $1 WHERE LOWER(wallet_address) = LOWER($2)`,
+        [status, account]
+      );
+      console.log(`Updated user ${account} to whitelisted: ${status}`);
+    } else {
+      // It's not in the users table, so it MUST be a smart contract/protocol!
+      await pool.query(
+        `INSERT INTO whitelisted_contracts (contract_address, name, is_whitelisted, updated_at) 
+         VALUES ($2, 'Whitelisted Protocol', $1, CURRENT_TIMESTAMP)
+         ON CONFLICT (contract_address) 
+         DO UPDATE SET is_whitelisted = EXCLUDED.is_whitelisted, updated_at = CURRENT_TIMESTAMP`,
+        [status, account.toLowerCase()]
+      );
+      console.log(`Updated protocol ${account} to whitelisted: ${status}`);
+    }
+  } catch (error) {
+    console.error(`❌ Failed to process whitelist event:`, error.message);
+  }
+}
+
+
+
 // -------------------------------------------------------------
 // ALPACA WEBSOCKET (PHASE 2)
 // -------------------------------------------------------------
@@ -592,7 +625,7 @@ async function syncBacklog() {
 
       const logs = await client.getLogs({
         address: dTSLA_ADDRESS,
-        events: [depositReceivedEvent, mintedEvent, redeemRequestedEvent, redeemedEvent, mintCanceledEvent, redeemCanceledEvent],
+        events: [depositReceivedEvent, mintedEvent, redeemRequestedEvent, redeemedEvent, mintCanceledEvent, redeemCanceledEvent, whitelistUpdatedEvent],
         fromBlock,
         toBlock
       });
@@ -610,6 +643,8 @@ async function syncBacklog() {
           await handleMintCanceled(log);
         } else if (log.eventName === 'RedeemCanceled') {
           await handleRedeemCanceled(log);
+        } else if (log.eventName === 'WhitelistUpdated') {
+          await handleWhitelistUpdated(log);
         }
       }
 
@@ -631,7 +666,7 @@ function watchEvents() {
   console.log("📡 Subscribing to real-time events via WebSocket...");
   wsClient.watchContractEvent({
     address: dTSLA_ADDRESS,
-    abi: [depositReceivedEvent, mintedEvent, redeemRequestedEvent, redeemedEvent, mintCanceledEvent, redeemCanceledEvent],
+    abi: [depositReceivedEvent, mintedEvent, redeemRequestedEvent, redeemedEvent, mintCanceledEvent, redeemCanceledEvent, whitelistUpdatedEvent],
     onLogs: async (logs) => {
       if (logs.length === 0) return;
 

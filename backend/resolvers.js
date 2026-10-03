@@ -331,13 +331,16 @@ const resolvers = {
       const availableFiat = await getAvailableFiat();
 
       // 2. Atomically reserve the fiat first (Solves the Race Condition!)
-      const newReservedFiat = await redisClient.incrByFloat('alpaca:reserved_buying_power', usdcAmount);
+      const parsedUsdc = parseFloat(usdcAmount);
+      const newReservedFiat = await redisClient.incrByFloat('alpaca:reserved_buying_power', parsedUsdc);
+      
+      const previousReservedFiat = newReservedFiat - parsedUsdc;
+      const trulyAvailable = availableFiat - previousReservedFiat;
 
-      const unreservedFiat = availableFiat - newReservedFiat;
-      if (unreservedFiat < 0) {
+      if (trulyAvailable < parsedUsdc) {
         // Rollback the reservation since it exceeds buying power
-        await redisClient.incrByFloat('alpaca:reserved_buying_power', -usdcAmount);
-        throw new Error(`Insufficient Buying Power. Available: $${availableFiat - (newReservedFiat - usdcAmount)}`);
+        await redisClient.incrByFloat('alpaca:reserved_buying_power', -parsedUsdc);
+        throw new Error(`Insufficient Buying Power. Available: $${trulyAvailable.toFixed(2)}`);
       }
 
       // 3. Generate Oracle Signature (The UUID)
@@ -438,50 +441,7 @@ const resolvers = {
       console.log(`🎉 New User Created in DB: ${name}`);
       return rows[0];
     },
-    upsertContract: async (_, { contract_address, name, is_whitelisted }, context) => {
-      if (!context.user) throw new Error("UNAUTHENTICATED");
 
-      const userRes = await pool.query('SELECT role FROM users WHERE privy_id = $1', [context.user.privyUserId]);
-      if (userRes.rows.length === 0 || userRes.rows[0].role !== 'admin') {
-        throw new Error("UNAUTHORIZED Admin Only");
-      }
-
-      // Upsert query using PostgreSQL ON CONFLICT
-      const { rows } = await pool.query(
-        `INSERT INTO whitelisted_contracts (contract_address, name, is_whitelisted, updated_at) 
-         VALUES ($1, $2, $3, CURRENT_TIMESTAMP) 
-         ON CONFLICT (contract_address) 
-         DO UPDATE SET name = EXCLUDED.name, is_whitelisted = EXCLUDED.is_whitelisted, updated_at = CURRENT_TIMESTAMP 
-         RETURNING *`,
-        [contract_address.toLowerCase(), name, is_whitelisted]
-      );
-
-      console.log(`✅ Upserted Protocol Contract: ${name} (${contract_address}) -> ${is_whitelisted}`);
-      return rows[0];
-    },
-    updateUserWhitelist: async (_, { wallet_address, is_whitelisted }, context) => {
-      if (!context.user) throw new Error("UNAUTHENTICATED");
-
-      const userRes = await pool.query('SELECT role FROM users WHERE privy_id = $1', [context.user.privyUserId]);
-      if (userRes.rows.length === 0 || userRes.rows[0].role !== 'admin') {
-        throw new Error("UNAUTHORIZED Admin Only");
-      }
-
-      const { rows } = await pool.query(
-        `UPDATE users 
-         SET is_whitelisted = $1, whitelist_updated_at = extract(epoch from now()) * 1000 
-         WHERE wallet_address = $2 
-         RETURNING *`,
-        [is_whitelisted, wallet_address]
-      );
-
-      if (rows.length === 0) {
-        throw new Error("User not found or no matching wallet address");
-      }
-
-      console.log(`✅ Updated User Whitelist: ${wallet_address} -> ${is_whitelisted}`);
-      return rows[0];
-    },
     cancelPendingTransaction: async (_, { transactionHash }, context) => {
       if (!context.user) throw new Error("UNAUTHENTICATED");
       const { alpaca } = require('./alpaca');

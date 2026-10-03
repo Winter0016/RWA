@@ -105,18 +105,6 @@ const typeDefs = `#graphql
       wallet_address: String
     ): User
 
-    # Admin: Upsert a protocol contract
-    upsertContract(
-      contract_address: String!
-      name: String!
-      is_whitelisted: Boolean!
-    ): WhitelistedContract
-
-    # Admin: Update a user's whitelist status
-    updateUserWhitelist(
-      wallet_address: String!
-      is_whitelisted: Boolean!
-    ): User
 
     # User actively cancels a pending order (e.g. before Alpaca fills it)
     cancelPendingTransaction(transactionHash: String!): Quote
